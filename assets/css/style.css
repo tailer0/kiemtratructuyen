@@ -1,0 +1,151 @@
+/* --- General Styles --- */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f7f9;
+    color: #333;
+    line-height: 1.6;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.container {
+    background: #fff;
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    width: 90%;
+    max-width: 800px;
+    margin: 2rem auto;
+}
+
+h1, h2, h3 {
+    color: #0056b3;
+}
+
+/* --- Forms --- */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+textarea,
+select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-sizing: border-box; /* Important */
+}
+
+button, .button {
+    background-color: #007bff;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1rem;
+    text-decoration: none;
+    display: inline-block;
+}
+
+button:hover, .button:hover {
+    background-color: #0056b3;
+}
+
+/* --- Login Button --- */
+.login-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background-color: #4285F4;
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: bold;
+    max-width: 250px;
+}
+.login-button img {
+    background: white;
+    padding: 2px;
+    border-radius: 3px;
+    width: 24px;
+    height: 24px;
+}
+
+/* --- Tables (For Admin) --- */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+
+th, td {
+    padding: 12px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+th {
+    background-color: #e9ecef;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+/* --- Test Creation --- */
+.question-block {
+    border: 1px dashed #ccc;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 5px;
+}
+
+/* --- Header & Navigation --- */
+.app-header {
+    background: #fff;
+    padding: 1rem 2rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-sizing: border-box;
+}
+
+.app-header .logo {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #0056b3;
+}
+
+.app-header .user-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.app-header .user-info img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+}
+
+.app-header .user-info a {
+    color: #dc3545;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+/* Make body have padding-top to avoid content being hidden by fixed header */
+body {
+    padding-top: 80px; 
+}
