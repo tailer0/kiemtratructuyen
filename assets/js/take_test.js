@@ -1,123 +1,185 @@
-    document.addEventListener("DOMContentLoaded", () => {
-        const attemptId = document.body.dataset.attemptId; // Lấy ID lần làm bài từ thẻ body
-        if (!attemptId) return;
+// Chờ cho toàn bộ trang được tải xong
+document.addEventListener('DOMContentLoaded', () => {
+    // Lấy các phần tử HTML cần thiết
+    const timerElement = document.getElementById('timer');
+    const webcamElement = document.getElementById('webcam');
+    const statusBox = document.getElementById('status-box');
+    const captureCanvas = document.getElementById('captureCanvas');
+    const testForm = document.getElementById('test-form');
 
-        // --- 1. Giám sát chuyển tab ---
-        let tabSwitchCount = 0;
-        document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === 'hidden') {
-                tabSwitchCount++;
-                console.log(`Bạn đã chuyển tab ${tabSwitchCount} lần.`);
-                // Gửi cảnh báo về server
-                sendCheatingLog('tab_switch', `Chuyển tab lần thứ ${tabSwitchCount}`);
-            }
-        });
+    let model, videoInterval;
 
-        // Hàm gửi log về server
-        function sendCheatingLog(logType, details, proofImage = null) {
-            const formData = new FormData();
-            formData.append('attempt_id', attemptId);
-            formData.append('log_type', logType);
-            formData.append('details', details);
-            if (proofImage) {
-                formData.append('proof_image', proofImage);
-            }
+    // --- PHẦN 1: ĐỒNG HỒ ĐẾM NGƯỢC VÀ GIÁM SÁT CHUYỂN TAB ---
 
-            fetch('/student/log_cheating.php', {
+    // Thiết lập đồng hồ đếm ngược
+    let timeLeft = DURATION;
+    const timerInterval = setInterval(() => {
+        timeLeft--;
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        timerElement.textContent = `Thời gian: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            alert('Hết giờ làm bài!');
+            testForm.submit();
+        }
+    }, 1000);
+
+    // Giám sát việc chuyển tab
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            logCheating('switched_tab', null); // Gửi log gian lận khi chuyển tab
+        }
+    });
+
+    // --- PHẦN 2: KHỞI TẠO WEBCAM VÀ MÔ HÌNH AI ---
+
+    async function setupCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 320, height: 240 },
+                audio: false
+            });
+            webcamElement.srcObject = stream;
+            return new Promise((resolve) => {
+                webcamElement.onloadedmetadata = () => resolve(webcamElement);
+            });
+        } catch (error) {
+            statusBox.textContent = "Lỗi: Không thể truy cập camera.";
+            console.error("Lỗi truy cập camera:", error);
+            return null;
+        }
+    }
+
+    async function loadModel() {
+        statusBox.textContent = 'Đang tải mô hình AI...';
+        try {
+            // Tải mô hình nhận diện điểm mốc khuôn mặt
+            model = await faceLandmarksDetection.load(
+                faceLandmarksDetection.SupportedPackages.mediapipeFacemesh,
+                { maxFaces: 1 }
+            );
+            statusBox.textContent = 'Hệ thống giám sát đã sẵn sàng.';
+            return true;
+        } catch (error) {
+            statusBox.textContent = "Lỗi: Không thể tải mô hình AI.";
+            console.error("Lỗi tải mô hình:", error);
+            return false;
+        }
+    }
+
+    // --- PHẦN 3: LOGIC PHÂN TÍCH VÀ PHÁT HIỆN GIAN LẬN ---
+    
+    let suspiciousStartTime = null; // Thời điểm bắt đầu hành vi đáng ngờ
+    const SUSPICIOUS_THRESHOLD_MS = 3000; // Ngưỡng thời gian cho hành vi đáng ngờ (3 giây)
+    let isLogging = false; // Cờ để tránh gửi log liên tục
+
+    async function detectFaces() {
+        const predictions = await model.estimateFaces({ input: webcamElement });
+
+        if (predictions.length === 0) {
+            // Không tìm thấy khuôn mặt
+            statusBox.textContent = 'Cảnh báo: Không tìm thấy khuôn mặt!';
+            logSuspiciousBehavior('no_face_detected');
+            return;
+        }
+
+        const face = predictions[0];
+        const keypoints = face.scaledMesh;
+        
+        // Các điểm mốc quan trọng trên khuôn mặt
+        const nose = keypoints[4];      // Chóp mũi
+        const leftEye = keypoints[130]; // Góc mắt trái
+        const rightEye = keypoints[359];// Góc mắt phải
+
+        // Tính toán độ nghiêng của đầu
+        const eyeMidpoint = [(leftEye[0] + rightEye[0]) / 2, (leftEye[1] + rightEye[1]) / 2];
+        const angle = Math.atan2(nose[1] - eyeMidpoint[1], nose[0] - eyeMidpoint[0]) * 180 / Math.PI;
+
+        // Phát hiện hành vi gian lận
+        let isSuspicious = false;
+        let violationType = '';
+
+        if (Math.abs(angle) > 110 || Math.abs(angle) < 70) {
+            // Đầu quay sang trái hoặc phải quá nhiều
+            statusBox.textContent = 'Cảnh báo: Nhìn ra ngoài!';
+            violationType = 'looking_away';
+            isSuspicious = true;
+        } else if (angle > 95) {
+             // Đầu cúi xuống quá thấp
+            statusBox.textContent = 'Cảnh báo: Cúi đầu quá thấp!';
+            violationType = 'head_down';
+            isSuspicious = true;
+        }
+
+        if (isSuspicious) {
+            logSuspiciousBehavior(violationType);
+        } else {
+            // Nếu không còn đáng ngờ, reset bộ đếm
+            suspiciousStartTime = null;
+            statusBox.textContent = 'Hệ thống giám sát đã sẵn sàng.';
+        }
+    }
+    
+    function logSuspiciousBehavior(violationType) {
+        if (suspiciousStartTime === null) {
+            suspiciousStartTime = Date.now();
+        }
+        
+        const suspiciousDuration = Date.now() - suspiciousStartTime;
+        
+        if (suspiciousDuration > SUSPICIOUS_THRESHOLD_MS && !isLogging) {
+            isLogging = true;
+            const imageData = captureFrame();
+            logCheating(violationType, imageData);
+            
+            // Reset bộ đếm và cờ sau khi gửi log
+            suspiciousStartTime = null; 
+            setTimeout(() => { isLogging = false; }, 5000); // Chờ 5 giây trước khi cho phép log tiếp
+        }
+    }
+
+    function captureFrame() {
+        const context = captureCanvas.getContext('2d');
+        captureCanvas.width = webcamElement.videoWidth;
+        captureCanvas.height = webcamElement.videoHeight;
+        context.drawImage(webcamElement, 0, 0, captureCanvas.width, captureCanvas.height);
+        return captureCanvas.toDataURL('image/jpeg');
+    }
+
+    async function logCheating(type, imageData) {
+        console.log(`Phát hiện gian lận: ${type}`);
+        const formData = new FormData();
+        formData.append('attempt_id', ATTEMPT_ID);
+        formData.append('violation_type', type);
+        if (imageData) {
+            formData.append('screenshot', imageData);
+        }
+        
+        try {
+            await fetch('log_cheating.php', {
                 method: 'POST',
                 body: formData
-            }).catch(error => console.error('Lỗi gửi log:', error));
-        }
-
-
-        // --- 2. Giám sát bằng Webcam (Sử dụng TensorFlow.js và MoveNet) ---
-        // LƯU Ý: Phần này rất nâng cao và cần cài đặt thư viện TensorFlow.js
-        // <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-        // <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/movenet"></script>
-
-        const video = document.getElementById('webcam');
-        const canvas = document.getElementById('output');
-        const ctx = canvas.getContext('2d');
-        let detector;
-
-        async function setupCamera() {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('API Camera không được trình duyệt này hỗ trợ.');
-            }
-            const stream = await navigator.mediaDevices.getUserMedia({
-                'audio': false,
-                'video': { width: 640, height: 480 },
             });
-            video.srcObject = stream;
-            return new Promise((resolve) => {
-                video.onloadedmetadata = () => {
-                    resolve(video);
-                };
-            });
+        } catch (error) {
+            console.error('Lỗi khi gửi log gian lận:', error);
         }
+    }
 
-        async function loadModel() {
-            const detectorConfig = { modelType: 'movenet/singlepose/lightning' };
-            detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
-            console.log('MoveNet model loaded.');
-        }
+    // --- PHẦN 4: HÀM KHỞI CHẠY CHÍNH ---
 
-        let violationStartTime = null;
-        const VIOLATION_THRESHOLD_MS = 3000; // Ngưỡng vi phạm: 3 giây
+    async function main() {
+        const cameraReady = await setupCamera();
+        if (!cameraReady) return;
 
-        async function detectPose() {
-            if (detector) {
-                const poses = await detector.estimatePoses(video);
-                ctx.drawImage(video, 0, 0, 640, 480);
+        const modelReady = await loadModel();
+        if (!modelReady) return;
+        
+        // Bắt đầu vòng lặp giám sát, chạy 2 lần mỗi giây
+        videoInterval = setInterval(detectFaces, 500);
+    }
 
-                if (poses.length === 0) {
-                    console.warn("Không phát hiện người!");
-                    handleViolation("Không phát hiện người");
-                } else if (poses.length > 1) {
-                    console.warn("Phát hiện nhiều hơn 1 người!");
-                    handleViolation("Phát hiện nhiều người");
-                } else {
-                    const keypoints = poses[0].keypoints;
-                    const nose = keypoints.find(k => k.name === 'nose');
-                    const leftEye = keypoints.find(k => k.name === 'left_eye');
-                    const rightEye = keypoints.find(k => k.name === 'right_eye');
+    // Bắt đầu chạy
+    main();
+});
 
-                    // Ví dụ: Kiểm tra nếu không thấy mắt và mũi (đầu quay đi)
-                    if (nose.score < 0.5 || leftEye.score < 0.5 || rightEye.score < 0.5) {
-                        console.warn("Nghi ngờ quay mặt đi!");
-                        handleViolation("Nghi ngờ quay mặt đi");
-                    } else {
-                        // Nếu không vi phạm, reset bộ đếm
-                        violationStartTime = null;
-                    }
-                }
-            }
-            requestAnimationFrame(detectPose);
-        }
-
-        function handleViolation(details) {
-            if (violationStartTime === null) {
-                violationStartTime = Date.now();
-            } else if (Date.now() - violationStartTime > VIOLATION_THRESHOLD_MS) {
-                console.error(`VI PHẠM: ${details}`);
-                // Chụp ảnh và gửi đi
-                const proofImage = canvas.toDataURL('image/jpeg');
-                sendCheatingLog('pose_violation', details, proofImage);
-                // Reset để không gửi liên tục
-                violationStartTime = null;
-            }
-        }
-
-        // Khởi chạy
-        async function main() {
-             // Chỉ khởi chạy nếu có element video
-            if (!video) return;
-            await setupCamera();
-            video.play();
-            await loadModel();
-            detectPose();
-        }
-
-        main();
-    });
-    
