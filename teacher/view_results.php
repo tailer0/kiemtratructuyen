@@ -56,13 +56,25 @@ define('MAX_VIOLATIONS_FOR_PERCENTAGE', 20);
         .modal {
             display: none; position: fixed; z-index: 1000; left: 0; top: 0;
             width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8);
+            align-items: center; justify-content: center;
         }
         .modal-content {
-            margin: 5% auto; display: block; max-width: 80%; max-height: 80%;
+            margin: auto; display: block; max-width: 80%; max-height: 80%;
+            border-radius: 5px;
         }
         .close-modal {
             position: absolute; top: 15px; right: 35px; color: #f1f1f1;
             font-size: 40px; font-weight: bold; cursor: pointer;
+            transition: 0.3s;
+        }
+        .close-modal:hover {
+            color: #bbb;
+        }
+        .violation-list {
+            padding-left: 20px;
+            text-align: left;
+            margin: 5px 0 0 0;
+            list-style-type: none;
         }
     </style>
 </head>
@@ -95,7 +107,8 @@ define('MAX_VIOLATIONS_FOR_PERCENTAGE', 20);
                             <?php
                                 $violation_count = isset($cheating_logs[$res['id']]) ? count($cheating_logs[$res['id']]) : 0;
                                 $percentage = min(100, ($violation_count / MAX_VIOLATIONS_FOR_PERCENTAGE) * 100);
-                                echo number_format($percentage, 0) . '%';
+                                $color = $percentage > 50 ? 'red' : ($percentage > 20 ? 'orange' : 'inherit');
+                                echo '<strong style="color: '.$color.';">' . number_format($percentage, 0) . '%</strong>';
                             ?>
                         </td>
                         <td>
@@ -138,19 +151,26 @@ define('MAX_VIOLATIONS_FOR_PERCENTAGE', 20);
             document.querySelectorAll('.view-proof').forEach(link => {
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
-                    modal.style.display = 'block';
+                    modal.style.display = 'flex'; // Dùng flex để căn giữa
                     modalImg.src = this.dataset.src;
                 });
             });
 
-            closeBtn.addEventListener('click', function() {
+            function closeModal() {
                 modal.style.display = 'none';
-            });
+            }
 
-            // Đóng modal khi click ra ngoài ảnh
-            window.addEventListener('click', function(e) {
-                if (e.target == modal) {
-                    modal.style.display = 'none';
+            closeBtn.addEventListener('click', closeModal);
+
+            // Đóng modal khi click ra ngoài ảnh hoặc nhấn phím Esc
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+            document.addEventListener('keydown', function(e) {
+                if (e.key === "Escape" && modal.style.display === 'flex') {
+                    closeModal();
                 }
             });
         });

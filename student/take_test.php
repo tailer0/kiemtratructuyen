@@ -1,187 +1,131 @@
-// Chờ cho toàn bộ trang được tải xong
-document.addEventListener('DOMContentLoaded', () => {
-    // Lấy các phần tử HTML cần thiết
-    const timerElement = document.getElementById('timer');
-    const webcamElement = document.getElementById('webcam');
-    const statusBox = document.getElementById('status-box');
-    const captureCanvas = document.getElementById('captureCanvas');
-    const testForm = document.getElementById('test-form');
+<?php
+require_once '../config.php';
 
-    let model, videoInterval;
+// Bảo vệ trang: Yêu cầu phải có attempt_id
+if (!isset($_GET['attempt_id'])) {
+    die("Truy cập không hợp lệ.");
+}
+$attempt_id = $_GET['attempt_id'];
 
-    // --- PHẦN 1: ĐỒNG HỒ ĐẾM NGƯỢC VÀ GIÁM SÁT CHUYỂN TAB ---
+// Lấy thông tin về lần làm bài này
+$stmt = $pdo->prepare("SELECT * FROM test_attempts WHERE id = ?");
+$stmt->execute([$attempt_id]);
+$attempt = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Thiết lập đồng hồ đếm ngược
-    let timeLeft = DURATION;
-    const timerInterval = setInterval(() => {
-        timeLeft--;
-        const minutes = Math.floor(timeLeft / 60);
-        const seconds = timeLeft % 60;
-        timerElement.textContent = `Thời gian: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        if (timeLeft <= 0) {
-            clearInterval(timerInterval);
-            clearInterval(videoInterval); // Dừng giám sát khi hết giờ
-            alert('Hết giờ làm bài!');
-            testForm.submit();
-        }
-    }, 1000);
+if (!$attempt) {
+    die("Lần làm bài không tồn tại.");
+}
+$test_id = $attempt['test_id'];
 
-    // Giám sát việc chuyển tab
-    document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            logCheating('switched_tab', null);
-        }
-    });
+// Lấy thông tin bài test (đặc biệt là thời gian)
+$stmt = $pdo->prepare("SELECT title, duration_minutes FROM tests WHERE id = ?");
+$stmt->execute([$test_id]);
+$test = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // --- PHẦN 2: KHỞI TẠO WEBCAM VÀ MÔ HÌNH AI (ĐÃ CẬP NHẬT) ---
+if (!$test) {
+    die("Bài kiểm tra không tồn tại.");
+}
 
-    async function setupCamera() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 320, height: 240 },
-                audio: false
-            });
-            webcamElement.srcObject = stream;
-            return new Promise((resolve) => {
-                webcamElement.onloadedmetadata = () => resolve(webcamElement);
-            });
-        } catch (error) {
-            statusBox.textContent = "Lỗi: Không thể truy cập camera.";
-            console.error("Lỗi truy cập camera:", error);
-            return null;
-        }
+// Lấy danh sách câu hỏi và các lựa chọn trả lời
+$stmt = $pdo->prepare("
+    SELECT q.id as question_id, q.question_text, a.id as answer_id, a.answer_text 
+    FROM questions q
+    JOIN answers a ON q.id = a.question_id
+    WHERE q.test_id = ?
+    ORDER BY q.id, a.id
+");
+$stmt->execute([$test_id]);
+$qa_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Sắp xếp lại dữ liệu thành mảng câu hỏi và câu trả lời lồng nhau
+$questions = [];
+foreach ($qa_raw as $row) {
+    if (!isset($questions[$row['question_id']])) {
+        $questions[$row['question_id']] = [
+            'id' => $row['question_id'],
+            'text' => $row['question_text'],
+            'answers' => []
+        ];
     }
+    $questions[$row['question_id']]['answers'][] = [
+        'id' => $row['answer_id'],
+        'text' => $row['answer_text']
+    ];
+}
 
-    async function loadModel() {
-        statusBox.textContent = 'Đang tải mô hình AI...';
-        try {
-            // SỬ DỤNG API MỚI ĐỂ TẢI MODEL
-            const modelType = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-            const detectorConfig = {
-                runtime: 'mediapipe',
-                solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh',
-                maxFaces: 1
-            };
-            model = await faceLandmarksDetection.createDetector(modelType, detectorConfig);
-            statusBox.textContent = 'Hệ thống giám sát đã sẵn sàng.';
-            return true;
-        } catch (error) {
-            statusBox.textContent = "Lỗi: Không thể tải mô hình AI.";
-            console.error("Lỗi tải mô hình:", error);
-            return false;
+?>
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Làm bài kiểm tra: <?php echo htmlspecialchars($test['title']); ?></title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <style>
+        .monitoring-section {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
-    }
-
-    // --- PHẦN 3: LOGIC PHÂN TÍCH VÀ PHÁT HIỆN GIAN LẬN (ĐÃ CẬP NHẬT) ---
-    
-    let suspiciousStartTime = null;
-    const SUSPICIOUS_THRESHOLD_MS = 3000;
-    let isLogging = false;
-
-    async function detectFaces() {
-        if (!model) return;
-        const predictions = await model.estimateFaces(webcamElement);
-
-        if (predictions.length === 0) {
-            statusBox.textContent = 'Cảnh báo: Không tìm thấy khuôn mặt!';
-            logSuspiciousBehavior('no_face_detected');
-            return;
+        #webcam {
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
-
-        const face = predictions[0];
-        // CẬP NHẬT CÁCH TRUY CẬP KEYPOINTS
-        const keypoints = face.keypoints;
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><?php echo htmlspecialchars($test['title']); ?></h1>
+        <div id="timer" class="timer">Thời gian: --:--</div>
         
-        const nose = keypoints.find(p => p.name === 'noseTip');
-        const leftEye = keypoints.find(p => p.name === 'leftEye');
-        const rightEye = keypoints.find(p => p.name === 'rightEye');
-
-        if (!nose || !leftEye || !rightEye) {
-             // Nếu không tìm thấy các điểm quan trọng, bỏ qua khung hình này
-            return;
-        }
-
-        // CẬP NHẬT CÁCH TÍNH TOÁN VỊ TRÍ
-        const eyeMidpoint = { x: (leftEye.x + rightEye.x) / 2, y: (leftEye.y + rightEye.y) / 2 };
-        const angle = Math.atan2(nose.y - eyeMidpoint.y, nose.x - eyeMidpoint.x) * 180 / Math.PI;
-
-        let isSuspicious = false;
-        let violationType = '';
-
-        if (Math.abs(angle) > 110 || Math.abs(angle) < 70) {
-            statusBox.textContent = 'Cảnh báo: Nhìn ra ngoài!';
-            violationType = 'looking_away';
-            isSuspicious = true;
-        } else if (angle > 95) {
-            statusBox.textContent = 'Cảnh báo: Cúi đầu quá thấp!';
-            violationType = 'head_down';
-            isSuspicious = true;
-        }
-
-        if (isSuspicious) {
-            logSuspiciousBehavior(violationType);
-        } else {
-            suspiciousStartTime = null;
-            statusBox.textContent = 'Hệ thống giám sát đã sẵn sàng.';
-        }
-    }
-    
-    function logSuspiciousBehavior(violationType) {
-        if (suspiciousStartTime === null) {
-            suspiciousStartTime = Date.now();
-        }
-        
-        const suspiciousDuration = Date.now() - suspiciousStartTime;
-        
-        if (suspiciousDuration > SUSPICIOUS_THRESHOLD_MS && !isLogging) {
-            isLogging = true;
-            const imageData = captureFrame();
-            logCheating(violationType, imageData);
+        <form id="test-form" action="submit_test.php" method="POST">
+            <input type="hidden" name="attempt_id" value="<?php echo $attempt_id; ?>">
             
-            suspiciousStartTime = null; 
-            setTimeout(() => { isLogging = false; }, 5000);
-        }
-    }
+            <?php $q_number = 1; ?>
+            <?php foreach ($questions as $question): ?>
+            <div class="question-container">
+                <p><strong>Câu <?php echo $q_number++; ?>:</strong> <?php echo htmlspecialchars($question['text']); ?></p>
+                <?php foreach ($question['answers'] as $answer): ?>
+                <div class="answer">
+                    <input type="radio" name="answers[<?php echo $question['id']; ?>]" value="<?php echo $answer['id']; ?>" id="ans-<?php echo $answer['id']; ?>">
+                    <label for="ans-<?php echo $answer['id']; ?>"><?php echo htmlspecialchars($answer['text']); ?></label>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php endforeach; ?>
+            
+            <button type="submit" class="button">Nộp bài</button>
+        </form>
 
-    function captureFrame() {
-        const context = captureCanvas.getContext('2d');
-        captureCanvas.width = webcamElement.videoWidth;
-        captureCanvas.height = webcamElement.videoHeight;
-        context.drawImage(webcamElement, 0, 0, captureCanvas.width, captureCanvas.height);
-        return captureCanvas.toDataURL('image/jpeg');
-    }
-
-    async function logCheating(type, imageData) {
-        console.log(`Phát hiện gian lận: ${type}`);
-        const formData = new FormData();
-        formData.append('attempt_id', ATTEMPT_ID);
-        formData.append('violation_type', type);
-        if (imageData) {
-            formData.append('screenshot', imageData);
-        }
+        <div class="monitoring-section">
+            <h4>Giám sát</h4>
+            <div id="status-box" style="color: red; font-weight: bold; margin-bottom: 5px;">Đang khởi tạo...</div>
+            <video id="webcam" width="320" height="240" autoplay muted></video>
+            <p style="font-size: 0.8em; margin-top: 5px;">Vui lòng nhìn thẳng vào màn hình và không rời khỏi vị trí trong suốt quá trình làm bài.</p>
+        </div>
         
-        try {
-            await fetch('log_cheating.php', {
-                method: 'POST',
-                body: formData
-            });
-        } catch (error) {
-            console.error('Lỗi khi gửi log gian lận:', error);
-        }
-    }
+        <!-- Canvas ẩn để chụp ảnh -->
+        <canvas id="captureCanvas" style="display:none;"></canvas>
+    </div>
 
-    // --- PHẦN 4: HÀM KHỞI CHẠY CHÍNH ---
+    <!-- Thư viện TensorFlow.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection"></script>
 
-    async function main() {
-        const cameraReady = await setupCamera();
-        if (!cameraReady) return;
-
-        const modelReady = await loadModel();
-        if (!modelReady) return;
-        
-        videoInterval = setInterval(detectFaces, 500);
-    }
-
-    main();
-});
+    <!-- Truyền biến từ PHP sang JS -->
+    <script>
+        const DURATION = <?php echo (int)$test['duration_minutes'] * 60; ?>;
+        const ATTEMPT_ID = <?php echo $attempt_id; ?>;
+    </script>
+    
+    <!-- Mã JS giám sát -->
+    <script src="/assets/js/take_test.js"></script>
+</body>
+</html>
 

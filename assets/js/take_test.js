@@ -9,6 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let model, videoInterval;
 
+    // --- CÁC HẰNG SỐ CÓ THỂ ĐIỀU CHỈNH ĐỘ NHẠY ---
+    const YAW_THRESHOLD = 20;       // Ngưỡng độ lệch trái/phải (càng nhỏ càng nhạy)
+    const PITCH_THRESHOLD = 15;     // Ngưỡng độ lệch lên/xuống (càng nhỏ càng nhạy)
+    const SUSPICIOUS_THRESHOLD_MS = 2000; // Thời gian duy trì hành vi đáng ngờ để ghi nhận (ms)
+    const LOG_COOLDOWN_MS = 5000;   // Thời gian chờ giữa các lần ghi nhận vi phạm (ms)
+
     // --- PHẦN 1: ĐỒNG HỒ ĐẾM NGƯỢC VÀ GIÁM SÁT CHUYỂN TAB ---
 
     // Thiết lập đồng hồ đếm ngược
@@ -20,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
         timerElement.textContent = `Thời gian: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         if (timeLeft <= 0) {
             clearInterval(timerInterval);
+            clearInterval(videoInterval);
             alert('Hết giờ làm bài!');
             testForm.submit();
         }
@@ -28,18 +35,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Giám sát việc chuyển tab
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
-            logCheating('switched_tab', null); // Gửi log gian lận khi chuyển tab
+            logCheating('switched_tab', 'Người dùng đã chuyển tab khác', null);
         }
     });
 
-    // --- PHẦN 2: KHỞI TẠO WEBCAM VÀ MÔ HÌNH AI ---
+    // --- PHẦN 2: KHỞI TẠO WEBCAM VÀ MÔ HÌNH AI (ĐÃ NÂNG CẤP) ---
 
     async function setupCamera() {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 320, height: 240 },
-                audio: false
-            });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
             webcamElement.srcObject = stream;
             return new Promise((resolve) => {
                 webcamElement.onloadedmetadata = () => resolve(webcamElement);
@@ -54,11 +58,13 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadModel() {
         statusBox.textContent = 'Đang tải mô hình AI...';
         try {
-            // Tải mô hình nhận diện điểm mốc khuôn mặt
-            model = await faceLandmarksDetection.load(
-                faceLandmarksDetection.SupportedPackages.mediapipeFacemesh,
-                { maxFaces: 1 }
-            );
+            const modelType = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
+            const detectorConfig = {
+                runtime: 'mediapipe',
+                solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh',
+                maxFaces: 5 // Nâng cấp để phát hiện nhiều khuôn mặt
+            };
+            model = await faceLandmarksDetection.createDetector(modelType, detectorConfig);
             statusBox.textContent = 'Hệ thống giám sát đã sẵn sàng.';
             return true;
         } catch (error) {
@@ -68,74 +74,89 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- PHẦN 3: LOGIC PHÂN TÍCH VÀ PHÁT HIỆN GIAN LẬN ---
+    // --- PHẦN 3: LOGIC PHÂN TÍCH VÀ PHÁT HIỆN GIAN LẬN (ĐÃ NÂNG CẤP CHUYÊN SÂU) ---
     
-    let suspiciousStartTime = null; // Thời điểm bắt đầu hành vi đáng ngờ
-    const SUSPICIOUS_THRESHOLD_MS = 3000; // Ngưỡng thời gian cho hành vi đáng ngờ (3 giây)
-    let isLogging = false; // Cờ để tránh gửi log liên tục
+    let suspiciousStates = {};
+    let isLogging = false;
 
     async function detectFaces() {
-        const predictions = await model.estimateFaces({ input: webcamElement });
+        if (!model) return;
+        const predictions = await model.estimateFaces(webcamElement, { flipHorizontal: false });
 
+        // Kịch bản 1: Không có ai trong khung hình
         if (predictions.length === 0) {
-            // Không tìm thấy khuôn mặt
             statusBox.textContent = 'Cảnh báo: Không tìm thấy khuôn mặt!';
-            logSuspiciousBehavior('no_face_detected');
+            logSuspiciousBehavior('no_face_detected', 'Không tìm thấy khuôn mặt trong khung hình.');
             return;
         }
 
+        // Kịch bản 2: Có nhiều hơn 1 người trong khung hình
+        if (predictions.length > 1) {
+            statusBox.textContent = `Cảnh báo: Phát hiện ${predictions.length} người!`;
+            logSuspiciousBehavior('multiple_faces', `Phát hiện ${predictions.length} người trong khung hình.`);
+            return;
+        }
+
+        // Kịch bản 3: Phân tích hướng nhìn của 1 người
         const face = predictions[0];
-        const keypoints = face.scaledMesh;
+        const keypoints = face.keypoints;
+
+        const leftEye = keypoints.find(p => p.name === 'leftEye');
+        const rightEye = keypoints.find(p => p.name === 'rightEye');
+        const nose = keypoints.find(p => p.name === 'noseTip');
+        const leftCheek = keypoints[234]; // Điểm mốc bên má trái
+        const rightCheek = keypoints[454]; // Điểm mốc bên má phải
+
+        if (!leftEye || !rightEye || !nose || !leftCheek || !rightCheek) return;
         
-        // Các điểm mốc quan trọng trên khuôn mặt
-        const nose = keypoints[4];      // Chóp mũi
-        const leftEye = keypoints[130]; // Góc mắt trái
-        const rightEye = keypoints[359];// Góc mắt phải
+        // Tính toán Yaw (xoay trái/phải)
+        const noseToLeftDist = Math.abs(nose.x - leftCheek.x);
+        const noseToRightDist = Math.abs(nose.x - rightCheek.x);
+        const yawRatio = noseToLeftDist / noseToRightDist;
+        
+        // Tính toán Pitch (ngẩng/cúi)
+        const eyeMidY = (leftEye.y + rightEye.y) / 2;
+        const pitchRatio = Math.abs(nose.y - eyeMidY);
 
-        // Tính toán độ nghiêng của đầu
-        const eyeMidpoint = [(leftEye[0] + rightEye[0]) / 2, (leftEye[1] + rightEye[1]) / 2];
-        const angle = Math.atan2(nose[1] - eyeMidpoint[1], nose[0] - eyeMidpoint[0]) * 180 / Math.PI;
-
-        // Phát hiện hành vi gian lận
         let isSuspicious = false;
         let violationType = '';
+        let violationDetails = '';
 
-        if (Math.abs(angle) > 110 || Math.abs(angle) < 70) {
-            // Đầu quay sang trái hoặc phải quá nhiều
-            statusBox.textContent = 'Cảnh báo: Nhìn ra ngoài!';
+        if (yawRatio > 1.8 || yawRatio < 0.5) {
             violationType = 'looking_away';
+            violationDetails = `Nghiêng đầu quá mức (Tỷ lệ: ${yawRatio.toFixed(2)})`;
             isSuspicious = true;
-        } else if (angle > 95) {
-             // Đầu cúi xuống quá thấp
-            statusBox.textContent = 'Cảnh báo: Cúi đầu quá thấp!';
+        } else if (pitchRatio > PITCH_THRESHOLD) {
             violationType = 'head_down';
+            violationDetails = `Cúi đầu hoặc nhìn lên bất thường (Độ lệch: ${pitchRatio.toFixed(2)})`;
             isSuspicious = true;
         }
 
         if (isSuspicious) {
-            logSuspiciousBehavior(violationType);
+            statusBox.textContent = `Cảnh báo: ${violationDetails}`;
+            logSuspiciousBehavior(violationType, violationDetails);
         } else {
-            // Nếu không còn đáng ngờ, reset bộ đếm
-            suspiciousStartTime = null;
+            // Nếu không có hành vi đáng ngờ, reset tất cả các trạng thái
+            suspiciousStates = {};
             statusBox.textContent = 'Hệ thống giám sát đã sẵn sàng.';
         }
     }
     
-    function logSuspiciousBehavior(violationType) {
-        if (suspiciousStartTime === null) {
-            suspiciousStartTime = Date.now();
+    function logSuspiciousBehavior(type, details) {
+        if (!suspiciousStates[type]) {
+            suspiciousStates[type] = Date.now();
         }
         
-        const suspiciousDuration = Date.now() - suspiciousStartTime;
+        const suspiciousDuration = Date.now() - suspiciousStates[type];
         
         if (suspiciousDuration > SUSPICIOUS_THRESHOLD_MS && !isLogging) {
-            isLogging = true;
+            isLogging = true; // Bắt đầu quá trình ghi log
             const imageData = captureFrame();
-            logCheating(violationType, imageData);
+            logCheating(type, details, imageData);
             
-            // Reset bộ đếm và cờ sau khi gửi log
-            suspiciousStartTime = null; 
-            setTimeout(() => { isLogging = false; }, 5000); // Chờ 5 giây trước khi cho phép log tiếp
+            // Reset tất cả trạng thái và bắt đầu cooldown
+            suspiciousStates = {}; 
+            setTimeout(() => { isLogging = false; }, LOG_COOLDOWN_MS);
         }
     }
 
@@ -147,20 +168,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return captureCanvas.toDataURL('image/jpeg');
     }
 
-    async function logCheating(type, imageData) {
-        console.log(`Phát hiện gian lận: ${type}`);
+    async function logCheating(type, details, imageData) {
+        console.log(`Phát hiện gian lận: ${type} - ${details}`);
         const formData = new FormData();
         formData.append('attempt_id', ATTEMPT_ID);
         formData.append('violation_type', type);
+        formData.append('details', details);
         if (imageData) {
             formData.append('screenshot', imageData);
         }
         
         try {
-            await fetch('log_cheating.php', {
-                method: 'POST',
-                body: formData
-            });
+            await fetch('log_cheating.php', { method: 'POST', body: formData });
         } catch (error) {
             console.error('Lỗi khi gửi log gian lận:', error);
         }
@@ -175,11 +194,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const modelReady = await loadModel();
         if (!modelReady) return;
         
-        // Bắt đầu vòng lặp giám sát, chạy 2 lần mỗi giây
-        videoInterval = setInterval(detectFaces, 500);
+        videoInterval = setInterval(detectFaces, 500); // Tần suất quét: 2 lần/giây
     }
 
-    // Bắt đầu chạy
     main();
 });
 
