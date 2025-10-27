@@ -11,8 +11,7 @@
             header('Location: /teacher/index.php');
             exit();
         } else {
-            // Người dùng thông thường có thể ở lại hoặc chuyển đến trang hồ sơ
-            // For now, let's just show a generic welcome
+            
         }
     }
 
