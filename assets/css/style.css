@@ -1,14 +1,21 @@
 /* --- General Styles --- */
 body {
     font-family: Arial, sans-serif;
-    background-color: #f4f7f9;
     color: #333;
     line-height: 1.6;
     margin: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
+    /* Thêm padding-top để nội dung không bị header che mất. */
+    padding-top: 80px; 
+    
+    /* --- CẬP NHẬT Hiệu ứng Track Trỏ chuột --- */
+    background-color: #ffffff;
+    /* Hiệu ứng gradient tinh tế hơn */
+    background-image: radial-gradient(
+        1000px circle at var(--x, 50%) var(--y, 50%),
+        var(--light-primary-color, #f0f7ff),
+        rgba(255, 255, 255, 0) 40%
+    );
+    transition: background 0.1s linear;
 }
 
 .container {
@@ -17,7 +24,7 @@ body {
     border-radius: 10px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
     width: 90%;
-    max-width: 800px;
+    max-width: 1100px; /* Tăng độ rộng tối đa cho các trang nội dung */
     margin: 2rem auto;
 }
 
@@ -26,17 +33,26 @@ h1, h2, h3 {
 }
 
 /* --- Forms --- */
+.form-group {
+    margin-bottom: 1rem;
+}
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
 input[type="text"],
+input[type="email"],
+input[type="password"],
 input[type="number"],
 input[type="date"],
 textarea,
 select {
     width: 100%;
     padding: 10px;
-    margin-bottom: 1rem;
     border: 1px solid #ccc;
     border-radius: 5px;
-    box-sizing: border-box; /* Important */
+    box-sizing: border-box; /* Quan trọng */
 }
 
 button, .button {
@@ -49,6 +65,7 @@ button, .button {
     font-size: 1rem;
     text-decoration: none;
     display: inline-block;
+    transition: background-color 0.3s ease;
 }
 
 button:hover, .button:hover {
@@ -76,26 +93,42 @@ button:hover, .button:hover {
     width: 24px;
     height: 24px;
 }
+.button.google-login {
+    background-color: #fff;
+    color: #555;
+    border: 1px solid #ddd;
+}
+.button.google-login:hover {
+    background-color: #f9f9f9;
+}
 
-/* --- Tables (For Admin) --- */
+
+/* --- Tables (For Admin & Teacher) --- */
 table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 1rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    border-radius: 8px;
+    overflow: hidden; /* Giúp bo góc cho table */
 }
 
 th, td {
-    padding: 12px;
+    padding: 12px 15px; /* Thêm padding ngang */
     border: 1px solid #ddd;
     text-align: left;
 }
 
 th {
     background-color: #e9ecef;
+    font-weight: 600;
 }
 
 tbody tr:nth-child(even) {
     background-color: #f8f9fa;
+}
+tbody tr:hover {
+    background-color: #f1f1f1;
 }
 
 /* --- Test Creation --- */
@@ -104,12 +137,14 @@ tbody tr:nth-child(even) {
     padding: 1rem;
     margin-bottom: 1rem;
     border-radius: 5px;
+    background: #fafafa;
 }
 
 /* --- Header & Navigation --- */
 .app-header {
     background: #fff;
-    padding: 1rem 2rem;
+    padding: 0 2rem; /* Giảm padding dọc, giữ padding ngang */
+    height: 70px; /* Đặt chiều cao cố định */
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     position: fixed;
     top: 0;
@@ -119,12 +154,14 @@ tbody tr:nth-child(even) {
     justify-content: space-between;
     align-items: center;
     box-sizing: border-box;
+    z-index: 1000;
 }
 
 .app-header .logo {
     font-size: 1.5rem;
     font-weight: bold;
     color: #0056b3;
+    text-decoration: none;
 }
 
 .app-header .user-info {
@@ -137,40 +174,432 @@ tbody tr:nth-child(even) {
     width: 40px;
     height: 40px;
     border-radius: 50%;
+    object-fit: cover; /* Đảm bảo ảnh không bị méo */
 }
 
-.app-header .user-info a {
-    color: #dc3545;
+/* CSS cho menu thả xuống */
+.user-menu {
+    position: relative;
+    cursor: pointer;
+}
+.user-menu-dropdown {
+    display: none;
+    position: absolute;
+    top: 50px; /* Điều chỉnh vị trí */
+    right: 0;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    min-width: 160px;
+    z-index: 1001;
+    overflow: hidden; /* Bo góc cho các item */
+}
+.user-menu:hover .user-menu-dropdown {
+    display: block;
+}
+.user-menu-dropdown a {
+    display: block;
+    padding: 10px 15px;
     text-decoration: none;
+    color: #333;
+    font-size: 15px;
+}
+.user-menu-dropdown a:hover {
+    background: #f4f7f9;
+}
+.user-menu-dropdown a.logout {
+    color: #dc3545;
+    border-top: 1px solid #eee;
+}
+
+.header-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+/* --- CSS riêng cho trang làm bài --- */
+.test-container {
+    max-width: 800px;
+}
+
+.proctoring-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    border: 3px solid #0056b3;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    z-index: 999;
+}
+#webcam, #output {
+    width: 200px;
+    height: 150px;
+    display: block;
+}
+#status-box {
+    padding: 8px;
+    background: #0056b3;
+    color: white;
+    text-align: center;
+    font-size: 14px;
+}
+#status-box.warning {
+    background: #dc3545;
+}
+
+#timer {
+    position: fixed;
+    top: 90px; /* Dưới header 20px */
+    right: 20px;
+    background: #ffc107;
+    color: #333;
+    padding: 10px 15px;
+    border-radius: 5px;
     font-weight: bold;
+    font-size: 1.2rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
-/* Make body have padding-top to avoid content being hidden by fixed header */
-body {
-    padding-top: 80px; 
+/* --- Lớp Alert --- */
+.alert {
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    border: 1px solid transparent;
+}
+.alert.error {
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+}
+.alert.success {
+    color: #155724;
+    background-color: #d4edda;
+    border-color: #c3e6cb;
 }
 
+/* --- CSS CHO TRANG CHỦ MỚI (Thêm từ index.php) --- */
+:root {
+    --primary-color: #007bff;
+    --light-primary-color: #f0f7ff;
+    --dark-text: #2c3e50;
+    --light-text: #5a6a7b;
+}
 
-/* CSS riêng cho trang làm bài */
-        #proctoring-container {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            border: 2px solid #0056b3;
-            border-radius: 5px;
-            overflow: hidden;
-        }
-        #webcam, #output {
-            width: 200px;
-            height: 150px;
-        }
-        #timer {
-            position: fixed;
-            top: 80px;
-            right: 20px;
-            background: #ffc107;
-            padding: 10px;
-            border-radius: 5px;
-            font-weight: bold;
-            font-size: 1.2rem;
-        }
+/* --- Hero Section --- */
+.hero-section {
+    padding: 120px 0 100px 0;
+    text-align: center;
+    max-width: 800px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 2;
+    /* Ghi đè container để xóa nền trắng */
+    background: transparent;
+    box-shadow: none;
+    padding: 0; 
+    margin-top: 60px;
+    margin-bottom: 60px;
+}
+.hero-section h1 {
+    font-size: 48px;
+    font-weight: 800;
+    color: var(--dark-text);
+    line-height: 1.2;
+    margin-bottom: 20px;
+    letter-spacing: -1px;
+}
+.hero-section h1 span {
+    color: var(--primary-color);
+}
+.hero-section p.subtitle {
+    font-size: 20px;
+    color: var(--light-text);
+    max-width: 600px;
+    margin: 0 auto 30px auto;
+    line-height: 1.6;
+}
+.hero-section .button {
+    padding: 16px 32px;
+    font-size: 18px;
+    font-weight: bold;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 123, 255, 0.2);
+}
+.hero-section .button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0, 123, 255, 0.3);
+}
+
+/* --- Features Section --- */
+.features-section {
+    padding: 60px 0 100px 0;
+    position: relative;
+    z-index: 2;
+    /* Ghi đè container để xóa nền trắng */
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+    max-width: 1100px;
+}
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 30px;
+    max-width: 1100px;
+    margin: 0 auto;
+    perspective: 1000px; /* THÊM MỚI: Thêm perspective cho hiệu ứng 3D */
+}
+.feature-card {
+    background: #ffffff;
+    padding: 35px 30px;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+    overflow: hidden;
+    position: relative;
+    
+    /* --- CẬP NHẬT: Trạng thái ban đầu của Animation --- */
+    opacity: 0;
+    transform: translateY(50px) rotateX(-30deg);
+    transition: all 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.feature-card:hover {
+    transform: translateY(-8px) rotateX(0deg); /* Cập nhật hover */
+    box-shadow: 0 12px 40px rgba(0, 123, 255, 0.1);
+    border-color: var(--primary-color);
+}
+/* --- THÊM MỚI: Trạng thái khi xuất hiện --- */
+.feature-card.is-visible {
+    opacity: 1;
+    transform: translateY(0) rotateX(0deg);
+}
+
+.feature-card .icon {
+    width: 50px;
+    height: 50px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--light-primary-color);
+    border-radius: 50%;
+    color: var(--primary-color);
+}
+.feature-card h3 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--dark-text);
+    margin-bottom: 10px;
+}
+.feature-card p {
+    color: var(--light-text);
+    line-height: 1.6;
+    font-size: 15px;
+}
+/* --- HẾT CSS TRANG CHỦ --- */
+
+/* --- THÊM MỚI: CSS CHO "HOW IT WORKS" --- */
+.how-it-works-section {
+    text-align: center;
+    padding: 60px 0 100px 0;
+    position: relative;
+    z-index: 2;
+    background: transparent;
+    box-shadow: none;
+    max-width: 1100px;
+}
+.how-it-works-section h2 {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--dark-text);
+    margin-bottom: 10px;
+}
+.how-it-works-section h2 span {
+    color: var(--primary-color);
+}
+.how-it-works-section .subtitle {
+    font-size: 18px;
+    color: var(--light-text);
+    max-width: 600px;
+    margin: 0 auto 50px auto;
+}
+.how-it-works-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 30px;
+    position: relative;
+}
+/* Đường gạch nối */
+.how-it-works-grid::before {
+    content: '';
+    position: absolute;
+    top: 50px; /* Căn giữa với icon */
+    left: 15%;
+    right: 15%;
+    height: 2px;
+    background: #e0e0e0;
+    border-style: dashed;
+    z-index: 1;
+}
+
+.step-card {
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    z-index: 2;
+    position: relative;
+    /* Animation */
+    opacity: 0;
+    transform: translateY(40px);
+    transition: all 0.6s ease-out;
+}
+.step-card.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+/* Thêm delay cho từng card */
+.step-card:nth-child(2) { transition-delay: 0.2s; }
+.step-card:nth-child(3) { transition-delay: 0.4s; }
+
+.step-card .step-number {
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 40px;
+    background: var(--primary-color);
+    color: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: bold;
+    border: 4px solid #fff;
+    box-shadow: 0 0 0 5px var(--primary-color);
+}
+.step-card .step-icon {
+    margin-top: 30px;
+    margin-bottom: 15px;
+    color: var(--primary-color);
+}
+.step-card .step-icon svg {
+    width: 32px;
+    height: 32px;
+}
+.step-card h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--dark-text);
+    margin-bottom: 10px;
+}
+.step-card p {
+    font-size: 15px;
+    color: var(--light-text);
+    line-height: 1.6;
+}
+
+/* --- Footer (PHẦN ĐƯỢC THÊM MỚI) --- */
+.main-footer {
+    background: #343a40; /* Màu nền tối */
+    color: #adb5bd; /* Màu chữ sáng hơn */
+    padding: 40px 0 0 0;
+    margin-top: 40px; /* Thêm khoảng cách với nội dung */
+    clear: both; /* Sửa lỗi float nếu có */
+}
+.footer-content {
+    display: grid;
+    grid-template-columns: 2fr 1fr; /* Chia cột cho giới thiệu và social */
+    gap: 30px;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 2rem 30px 2rem; /* Căn lề giống .container */
+    background: transparent; /* Xóa nền trắng của .container */
+    box-shadow: none; /* Xóa shadow của .container */
+}
+.footer-about h3 {
+    color: #fff;
+    font-size: 20px;
+    margin-bottom: 10px;
+}
+.footer-about p {
+    font-size: 15px;
+    line-height: 1.7;
+    max-width: 400px;
+}
+.footer-social h3 {
+    color: #fff;
+    font-size: 20px;
+    margin-bottom: 10px;
+}
+.footer-social a {
+    display: inline-block;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #495057;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+}
+.footer-social a svg {
+    width: 18px;
+    height: 18px;
+}
+.footer-social a:hover {
+    background: #007bff; /* Thay đổi màu khi hover */
+}
+.footer-bottom {
+    text-align: center;
+    padding: 20px;
+    background: #2c3034; /* Màu nền tối hơn một chút */
+    color: #888;
+    font-size: 14px;
+    border-top: 1px solid #495057;
+}
+
+/* Responsive cho footer */
+@media (max-width: 768px) {
+    /* ... (Phần responsive của footer) ... */
+    .footer-content {
+        grid-template-columns: 1fr; /* Chuyển thành 1 cột trên mobile */
+        text-align: center;
+    }
+    .footer-about p {
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .footer-social {
+        margin-top: 20px;
+    }
+    
+    /* --- THÊM MỚI: Responsive cho trang chủ --- */
+    .hero-section h1 {
+        font-size: 36px;
+    }
+    .hero-section p.subtitle {
+        font-size: 18px;
+    }
+    .how-it-works-grid {
+        grid-template-columns: 1fr;
+    }
+    .how-it-works-grid::before {
+        /* Ẩn đường gạch nối trên mobile */
+        display: none;
+    }
+    .step-card {
+        /* Xóa delay trên mobile để chúng xuất hiện đồng loạt */
+        transition-delay: 0s !important; 
+    }
+}
+
