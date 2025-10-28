@@ -2,6 +2,8 @@
     "name": "your-username/kiemtratructuyen",
     "description": "Một dự án kiểm tra trực tuyến bằng PHP",
     "require": {
-        "google/apiclient": "^2.18"
+        "google/apiclient": "^2.18",
+        "phpoffice/phpspreadsheet": "^5.2",
+        "phpoffice/phpword": "^1.4"
     }
 }

@@ -1,6 +1,5 @@
 <?php
 require_once '../config.php';
-
 // Bảo vệ trang: Chỉ admin mới được truy cập
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] != 'admin') {
     header('Location: /index.php');

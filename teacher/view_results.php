@@ -20,8 +20,8 @@ if (!$test) {
     die("Bài kiểm tra không tồn tại hoặc bạn không có quyền xem.");
 }
 
-// Lấy danh sách kết quả
-$stmt = $pdo->prepare("SELECT id, student_name, student_id, score, start_time, end_time FROM test_attempts WHERE test_id = ? ORDER BY student_name");
+// LPY: Cập nhật SQL để lấy thêm student_dob (ngày sinh)
+$stmt = $pdo->prepare("SELECT id, student_name, student_id, student_dob, score, start_time, end_time FROM test_attempts WHERE test_id = ? ORDER BY student_name");
 $stmt->execute([$test_id]);
 $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -41,7 +41,6 @@ foreach ($logs_raw as $log) {
 }
 
 // Định nghĩa mức độ vi phạm để tính toán tỷ lệ %
-// Giả sử 20 lần vi phạm là mức độ rất cao (100%)
 define('MAX_VIOLATIONS_FOR_PERCENTAGE', 20);
 
 ?>
@@ -70,19 +69,54 @@ define('MAX_VIOLATIONS_FOR_PERCENTAGE', 20);
         .close-modal:hover {
             color: #bbb;
         }
+        
+        /* LPY: CSS cho danh sách vi phạm ẩn/hiện */
         .violation-list {
+            display: none; /* Ẩn danh sách chi tiết ban đầu */
             padding-left: 20px;
             text-align: left;
             margin: 5px 0 0 0;
             list-style-type: none;
+            background: #fdfdfd;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
+        .violation-trigger {
+            cursor: pointer;
+            color: #007bff;
+            text-decoration: underline;
+            font-weight: bold;
+        }
+        .violation-trigger:hover {
+            color: #0056b3;
+        }
+
+        /* LPY: Thêm style cho nút xuất Excel */
+        .button-secondary {
+            background-color: #6c757d;
+        }
+        .button-secondary:hover {
+            background-color: #5a6268;
+        }
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
         }
     </style>
 </head>
 <body>
     <?php include '../_partials/header.php'; ?>
     <div class="container">
-        <h1>Kết quả bài kiểm tra: <?php echo htmlspecialchars($test['title']); ?></h1>
-        <a href="/teacher/index.php" class="button">Quay lại Dashboard</a>
+        <div class="header-actions">
+            <h1>Kết quả bài kiểm tra: <?php echo htmlspecialchars($test['title']); ?></h1>
+            <div>
+                <a href="/teacher/index.php" class="button">Quay lại</a>
+                <!-- LPY: Thêm nút xuất Excel -->
+                <a href="export_excel.php?test_id=<?php echo $test_id; ?>" class="button button-secondary">Xuất Excel (CSV)</a>
+            </div>
+        </div>
         
         <table>
             <thead>
@@ -113,8 +147,11 @@ define('MAX_VIOLATIONS_FOR_PERCENTAGE', 20);
                         </td>
                         <td>
                             <?php if ($violation_count > 0): ?>
-                                <strong><?php echo $violation_count; ?></strong> lần vi phạm.
-                                <ul class="violation-list">
+                                <!-- LPY: Tạo trigger để nhấp vào -->
+                                <strong class="violation-trigger" data-target="list-<?php echo $res['id']; ?>">
+                                    <?php echo $violation_count; ?> lần vi phạm (Nhấn để xem)
+                                </strong>
+                                <ul class="violation-list" id="list-<?php echo $res['id']; ?>">
                                 <?php foreach($cheating_logs[$res['id']] as $log): ?>
                                     <li>
                                         - <?php echo htmlspecialchars($log['details']); ?>
@@ -144,6 +181,7 @@ define('MAX_VIOLATIONS_FOR_PERCENTAGE', 20);
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // --- Logic cho Modal xem ảnh ---
             const modal = document.getElementById('imageModal');
             const modalImg = document.getElementById('modalImage');
             const closeBtn = document.querySelector('.close-modal');
@@ -151,7 +189,7 @@ define('MAX_VIOLATIONS_FOR_PERCENTAGE', 20);
             document.querySelectorAll('.view-proof').forEach(link => {
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
-                    modal.style.display = 'flex'; // Dùng flex để căn giữa
+                    modal.style.display = 'flex'; 
                     modalImg.src = this.dataset.src;
                 });
             });
@@ -159,10 +197,7 @@ define('MAX_VIOLATIONS_FOR_PERCENTAGE', 20);
             function closeModal() {
                 modal.style.display = 'none';
             }
-
             closeBtn.addEventListener('click', closeModal);
-
-            // Đóng modal khi click ra ngoài ảnh hoặc nhấn phím Esc
             modal.addEventListener('click', function(e) {
                 if (e.target === modal) {
                     closeModal();
@@ -172,6 +207,24 @@ define('MAX_VIOLATIONS_FOR_PERCENTAGE', 20);
                 if (e.key === "Escape" && modal.style.display === 'flex') {
                     closeModal();
                 }
+            });
+
+            // --- LPY: Logic mới cho danh sách vi phạm ẩn/hiện ---
+            document.querySelectorAll('.violation-trigger').forEach(trigger => {
+                trigger.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const targetId = this.dataset.target;
+                    const targetList = document.getElementById(targetId);
+                    if (targetList) {
+                        // Chuyển đổi trạng thái hiển thị
+                        const isHidden = targetList.style.display === 'none' || targetList.style.display === '';
+                        targetList.style.display = isHidden ? 'block' : 'none';
+                        // Cập nhật nội dung trigger
+                        this.textContent = isHidden 
+                            ? '<?php echo $violation_count; ?> lần vi phạm (Nhấn để ẩn)' 
+                            : '<?php echo $violation_count; ?> lần vi phạm (Nhấn để xem)';
+                    }
+                });
             });
         });
     </script>
