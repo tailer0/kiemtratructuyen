@@ -1,104 +1,52 @@
 <?php
+session_start();
 require_once '../config.php';
 
-// --- XỬ LÝ LOGIC VÀO PHÒNG THI ---
-$error = '';
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['invite_code'])) {
-    $invite_code = trim($_POST['invite_code']);
+if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] != 'user') {
+    header('Location: /index.php');
+    exit();
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $invite_code = trim($_POST['invite_code'] ?? '');
+
     if (empty($invite_code)) {
-        $error = "Vui lòng nhập mã mời.";
-    } else {
-        // Chuyển đến trang join.php (trong thư mục student) để xử lý tiếp
-        // Đây là file cũ của bạn dùng để nhập thông tin sinh viên
-        header("Location: /student/join.php?code=" . urlencode($invite_code));
+        echo "<script>alert('Vui lòng nhập mã mời!'); window.location='index.php';</script>";
         exit();
     }
+
+    // 1. Tìm bài test
+    $stmt = $pdo->prepare("SELECT id, status FROM tests WHERE invite_code = ?");
+    $stmt->execute([$invite_code]);
+    $test = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$test) {
+        echo "<script>alert('Mã mời không hợp lệ!'); window.location='index.php';</script>";
+        exit();
+    }
+
+    if ($test['status'] !== 'published') {
+        echo "<script>alert('Bài kiểm tra này chưa mở hoặc đã đóng!'); window.location='index.php';</script>";
+        exit();
+    }
+
+    // 2. Kiểm tra xem sinh viên đã làm bài này chưa (để báo lỗi sớm)
+    $stmt = $pdo->prepare("SELECT id, end_time FROM test_attempts WHERE test_id = ? AND user_id = ?");
+    $stmt->execute([$test['id'], $_SESSION['user_id']]);
+    $attempt = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($attempt && $attempt['end_time']) {
+        // Đã nộp bài -> Chuyển sang xem kết quả
+        header("Location: result.php?attempt_id=" . $attempt['id']);
+        exit();
+    }
+
+    // 3. Thành công -> Chuyển sang trang làm bài
+    // (Trang take_test.php sẽ tự động tạo attempt mới nếu chưa có)
+    header("Location: take_test.php?test_id=" . $test['id']);
+    exit();
+} else {
+    header('Location: index.php');
+    exit();
 }
 ?>
-
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vào phòng thi - Hệ thống Kiểm tra Trực tuyến</title>
-    <link rel="stylesheet" href="/assets/css/style.css">
-    <style>
-        /* CSS cho trang nhập mã */
-        .join-page-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding-top: 50px;
-            text-align: center;
-        }
-        .join-test-box {
-            width: 100%;
-            max-width: 450px;
-            margin-top: 30px;
-            padding: 30px 35px;
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        }
-        .join-test-box h2 {
-            margin-top: 0;
-            margin-bottom: 10px;
-        }
-        .join-test-box p {
-            color: #666;
-            margin-bottom: 25px;
-        }
-        .join-test-box .form-group {
-            text-align: left;
-            margin-bottom: 15px;
-        }
-        .join-test-box .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-        }
-        .join-test-box .form-group input {
-            width: 100%;
-            box-sizing: border-box; 
-        }
-        .join-test-box .button {
-            width: 100%;
-            padding: 12px;
-        }
-    </style>
-</head>
-<body>
-    <?php include ROOT_PATH . '/_partials/header.php';?>
-
-    <div class="container">
-        <div class="main-content join-page-container">
-
-            <div class="join-test-box">
-                <h2>Tham gia bài kiểm tra</h2>
-                <p>Nhập mã mời được cung cấp bởi giáo viên của bạn.</p>
-                
-                <?php if ($error): ?>
-                    <div class="alert error"><?php echo $error; ?></div>
-                <?php endif; ?>
-
-                <form action="join_test.php" method="POST">
-                    <div class="form-group">
-                        <label for="invite_code">Mã mời:</label>
-                        <input type="text" id="invite_code" name="invite_code" placeholder="Nhập mã..." required>
-                    </div>
-                    <button type="submit" class="button">Vào phòng thi</button>
-                </form>
-            </div>
-
-            <?php if (!isset($_SESSION['user_id'])): ?>
-                <p style="margin-top: 25px; font-size: 15px;">
-                    Bạn là giáo viên hoặc admin? <a href="/auth/login.php">Đăng nhập tại đây</a>.
-                </p>
-            <?php endif; ?>
-
-        </div>
-    </div>
-</body>
-</html>
