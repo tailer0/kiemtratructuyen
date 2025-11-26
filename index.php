@@ -111,8 +111,8 @@ if (isset($_SESSION['user_id'])) {
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-20">
                 <div class="flex items-center gap-2">
-                    <i class="fa-solid fa-brain text-3xl text-indigo-500 animate-pulse-slow"></i>
-                    <span class="font-display font-bold text-2xl tracking-tighter">OnlineTest<span class="text-indigo-500">.AI</span></span>
+                    <i class="fa-solid text-3xl text-indigo-500 animate-pulse-slow"></i>
+                    <span class="font-display font-bold text-2xl tracking-tighter">OnlineTest<span class="text-indigo-500">.VN</span></span>
                 </div>
                 <div class="hidden md:flex items-center space-x-8">
                     <a href="#features" class="text-sm font-medium text-gray-300 hover:text-white transition-colors">Tính năng</a>
@@ -139,7 +139,7 @@ if (isset($_SESSION['user_id'])) {
                 </span>
                 <h1 class="text-5xl md:text-7xl font-display font-bold mb-6 leading-tight">
                     Khảo thí Thông minh <br>
-                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">Được hỗ trợ bởi AI</span>
+                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">Được hỗ trợ bởi Tensorflow</span>
                 </h1>
                 <p class="text-lg md:text-xl text-gray-400 mb-10 max-w-2xl mx-auto">
                     Hệ thống kiểm tra trực tuyến tích hợp trí tuệ nhân tạo để giám sát hành vi, chống gian lận và đảm bảo tính công bằng tuyệt đối.
@@ -158,7 +158,7 @@ if (isset($_SESSION['user_id'])) {
             <!-- Dashboard Preview (3D Tilt Effect) -->
             <div class="mt-16 relative max-w-5xl mx-auto" data-aos="fade-up" data-aos-delay="200">
                 <div class="tilt-card rounded-xl p-2 bg-gradient-to-b from-white/10 to-white/0">
-                    <img src="https://shots.codepen.io/username/pen/abLOrwV-1280.jpg?version=1625671469" alt="Dashboard Preview" class="rounded-lg shadow-2xl w-full opacity-80 hover:opacity-100 transition-opacity duration-500">
+                    <img src="uploads/audio/WIN_20251120_12_12_41_Pro.jpg" alt="Dashboard Preview" class="rounded-lg shadow-2xl w-full opacity-80 hover:opacity-100 transition-opacity duration-500">
                     <!-- Thay ảnh trên bằng ảnh screenshot ứng dụng của bạn -->
                     <div class="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-transparent to-transparent"></div>
                 </div>
@@ -341,8 +341,8 @@ if (isset($_SESSION['user_id'])) {
             <div class="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
                 <div class="col-span-1 md:col-span-2">
                     <div class="flex items-center gap-2 mb-4">
-                        <i class="fa-solid fa-brain text-2xl text-indigo-500"></i>
-                        <span class="font-display font-bold text-xl">OnlineTest.AI</span>
+                        <i class="fa-solid text-2xl text-indigo-500"></i>
+                        <span class="font-display font-bold text-xl">OnlineTest.vn</span>
                     </div>
                     <p class="text-gray-500 max-w-xs">
                         Nền tảng thi cử trực tuyến hàng đầu, ứng dụng công nghệ AI để mang lại sự công bằng cho giáo dục.
@@ -359,13 +359,13 @@ if (isset($_SESSION['user_id'])) {
                 <div>
                     <h4 class="font-bold mb-4">Liên hệ</h4>
                     <ul class="space-y-2 text-gray-500 text-sm">
-                        <li><i class="fa-solid fa-envelope mr-2"></i> contact@onlinetest.ai</li>
+                        <li><i class="fa-solid fa-envelope mr-2"></i> contact@onlinetest.vn</li>
                         <li><i class="fa-solid fa-phone mr-2"></i> (+84) 123 456 789</li>
                     </ul>
                 </div>
             </div>
             <div class="text-center text-gray-600 text-sm border-t border-white/5 pt-8">
-                &copy; 2025 OnlineTest AI. All rights reserved.
+                &copy; 2025 OnlineTest vn. All rights reserved.
             </div>
         </div>
     </footer>

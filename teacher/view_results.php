@@ -118,6 +118,7 @@ foreach ($all_logs as $log) {
             <i class="fa-solid fa-shield-halved text-white text-2xl mr-2"></i>
             <span class="text-xl font-bold text-white">Smart Monitor</span>
         </div>
+
         <nav class="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
             <a href="index.php" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
                 <i class="fa-solid fa-chart-line w-6 text-center mr-2 text-lg"></i> Dashboard
@@ -131,7 +132,7 @@ foreach ($all_logs as $log) {
             <button onclick="toggleBulkActions()" class="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:bg-amber-50 hover:text-amber-600 transition-all">
                 <i class="fa-solid fa-bolt w-6 text-center mr-2 text-lg"></i> Hành động hàng loạt
             </button>
-            <button onclick="exportViolationReport()" class="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:bg-green-50 hover:text-green-600 transition-all">
+            <button onclick="export_excel.php?test_id=<?php echo $test_id; ?>" class="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:bg-green-50 hover:text-green-600 transition-all">
                 <i class="fa-solid fa-file-export w-6 text-center mr-2 text-lg"></i> Xuất báo cáo
             </button>
         </nav>
@@ -465,56 +466,56 @@ foreach ($all_logs as $log) {
             <div class="px-6 py-4 bg-slate-50 border-b">
                 <p class="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">Tin nhắn mẫu</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <button onclick="useTemplate('⚠️ CẢNH BÁO: Vui lòng tập trung vào bài thi!')" class="text-left bg-white hover:bg-amber-50 border border-amber-200 hover:border-amber-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
+                    <button onclick="useTemplate('CẢNH BÁO: Vui lòng tập trung vào bài thi!')" class="text-left bg-white hover:bg-amber-50 border border-amber-200 hover:border-amber-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
                         <div class="font-bold text-amber-700 group-hover:text-amber-800 flex items-center">
                             <i class="fa-solid fa-triangle-exclamation mr-2"></i> Cảnh báo chung
                         </div>
                         <div class="text-xs text-slate-600 mt-1">Nhắc nhở tập trung vào bài thi</div>
                     </button>
                     
-                    <button onclick="useTemplate('🚨 Phát hiện chuyển tab! Vui lòng quay lại màn hình thi ngay.')" class="text-left bg-white hover:bg-red-50 border border-red-200 hover:border-red-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
+                    <button onclick="useTemplate('Phát hiện chuyển tab! Vui lòng quay lại màn hình thi ngay.')" class="text-left bg-white hover:bg-red-50 border border-red-200 hover:border-red-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
                         <div class="font-bold text-red-700 group-hover:text-red-800 flex items-center">
                             <i class="fa-solid fa-window-restore mr-2"></i> Vi phạm chuyển tab
                         </div>
                         <div class="text-xs text-slate-600 mt-1">Yêu cầu quay lại màn hình thi</div>
                     </button>
                     
-                    <button onclick="useTemplate('📱 CẢNH BÁO: Phát hiện sử dụng điện thoại. Vui lòng cất ngay!')" class="text-left bg-white hover:bg-red-50 border border-red-200 hover:border-red-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
+                    <button onclick="useTemplate('CẢNH BÁO: Phát hiện sử dụng điện thoại. Vui lòng cất ngay!')" class="text-left bg-white hover:bg-red-50 border border-red-200 hover:border-red-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
                         <div class="font-bold text-red-700 group-hover:text-red-800 flex items-center">
                             <i class="fa-solid fa-mobile-screen mr-2"></i> Phát hiện điện thoại
                         </div>
                         <div class="text-xs text-slate-600 mt-1">Yêu cầu cất thiết bị ngay lập tức</div>
                     </button>
                     
-                    <button onclick="useTemplate('👁️ Camera không rõ! Vui lòng điều chỉnh để thấy rõ khuôn mặt.')" class="text-left bg-white hover:bg-orange-50 border border-orange-200 hover:border-orange-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
+                    <button onclick="useTemplate('Camera không rõ! Vui lòng điều chỉnh để thấy rõ khuôn mặt.')" class="text-left bg-white hover:bg-orange-50 border border-orange-200 hover:border-orange-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
                         <div class="font-bold text-orange-700 group-hover:text-orange-800 flex items-center">
                             <i class="fa-solid fa-camera mr-2"></i> Vấn đề camera
                         </div>
                         <div class="text-xs text-slate-600 mt-1">Yêu cầu điều chỉnh góc camera</div>
                     </button>
                     
-                    <button onclick="useTemplate('👤 Phát hiện có người khác trong khung hình. Làm bài một mình!')" class="text-left bg-white hover:bg-red-50 border border-red-200 hover:border-red-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
+                    <button onclick="useTemplate('Phát hiện có người khác trong khung hình. Làm bài một mình!')" class="text-left bg-white hover:bg-red-50 border border-red-200 hover:border-red-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
                         <div class="font-bold text-red-700 group-hover:text-red-800 flex items-center">
                             <i class="fa-solid fa-user-group mr-2"></i> Nhiều người
                         </div>
                         <div class="text-xs text-slate-600 mt-1">Phát hiện người khác trong khung hình</div>
                     </button>
                     
-                    <button onclick="useTemplate('⏱️ Bạn còn ít thời gian. Hãy tập trung hoàn thành bài thi!')" class="text-left bg-white hover:bg-blue-50 border border-blue-200 hover:border-blue-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
+                    <button onclick="useTemplate('Bạn còn ít thời gian. Hãy tập trung hoàn thành bài thi!')" class="text-left bg-white hover:bg-blue-50 border border-blue-200 hover:border-blue-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
                         <div class="font-bold text-blue-700 group-hover:text-blue-800 flex items-center">
                             <i class="fa-solid fa-clock mr-2"></i> Nhắc thời gian
                         </div>
                         <div class="text-xs text-slate-600 mt-1">Nhắc nhở về thời gian còn lại</div>
                     </button>
                     
-                    <button onclick="useTemplate('⛔ VI PHẠM NGHIÊM TRỌNG! Nếu tiếp tục, bài thi sẽ bị đình chỉ.')" class="text-left bg-white hover:bg-red-50 border border-red-300 hover:border-red-500 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
+                    <button onclick="useTemplate('VI PHẠM NGHIÊM TRỌNG! Nếu tiếp tục, bài thi sẽ bị đình chỉ.')" class="text-left bg-white hover:bg-red-50 border border-red-300 hover:border-red-500 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
                         <div class="font-bold text-red-800 group-hover:text-red-900 flex items-center">
                             <i class="fa-solid fa-ban mr-2"></i> Cảnh báo nghiêm khắc
                         </div>
                         <div class="text-xs text-slate-600 mt-1">Cảnh báo có thể đình chỉ</div>
                     </button>
                     
-                    <button onclick="useTemplate('✅ Tốt lắm! Hãy tiếp tục làm bài nghiêm túc như vậy.')" class="text-left bg-white hover:bg-green-50 border border-green-200 hover:border-green-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
+                    <button onclick="useTemplate('Tốt lắm! Hãy tiếp tục làm bài nghiêm túc như vậy.')" class="text-left bg-white hover:bg-green-50 border border-green-200 hover:border-green-400 rounded-lg px-4 py-3 text-sm transition-all shadow-sm group">
                         <div class="font-bold text-green-700 group-hover:text-green-800 flex items-center">
                             <i class="fa-solid fa-thumbs-up mr-2"></i> Khen ngợi
                         </div>

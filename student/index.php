@@ -65,7 +65,7 @@ unset($_SESSION['success_msg']);
                 <i class="fa-solid fa-user-gear w-6 text-center mr-2 text-lg"></i> Hồ sơ cá nhân
             </a>
             <div class="pt-4 mt-4 border-t border-gray-100">
-                <a href="../logout.php" class="flex items-center px-3 py-2 text-sm font-medium rounded-lg text-red-600 hover:bg-red-50">
+                <a href="/auth/logout.php" class="flex items-center px-3 py-2 text-sm font-medium rounded-lg text-red-600 hover:bg-red-50">
                     <i class="fa-solid fa-right-from-bracket w-6 text-center mr-2"></i> Đăng xuất
                 </a>
             </div>
@@ -82,9 +82,6 @@ unset($_SESSION['success_msg']);
     <div class="flex-1 flex flex-col h-screen overflow-hidden relative">
         <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
             <h1 class="text-xl font-bold text-slate-800">Góc học tập</h1>
-            <a href="update_profile.php" class="text-sm text-slate-500 hover:text-indigo-600 flex items-center">
-                <i class="fa-solid fa-pen-to-square mr-1"></i> Sửa thông tin
-            </a>
         </header>
 
         <main class="flex-1 overflow-y-auto p-6 bg-gray-50">

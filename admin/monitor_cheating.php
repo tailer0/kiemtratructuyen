@@ -40,7 +40,7 @@ $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
         <nav class="flex-1 py-6 px-3 space-y-1">
             <a href="index.php" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
-                <i class="fa-solid fa-gauge-high w-6 text-center mr-2"></i> Dashboard
+                <i class="fa-solid fa-gauge-high w-6 text-center mr-2"></i> Trang quản lý
             </a>
             <a href="manage_users.php" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
                 <i class="fa-solid fa-users-gear w-6 text-center mr-2"></i> Quản lý Users

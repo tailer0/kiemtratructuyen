@@ -1,6 +1,8 @@
-// Chờ cho toàn bộ trang được tải xong
+// Enhanced AI Proctoring System - OPTIMIZED FOR FAST LOADING
+// Face detection only, object detection optional/lazy loaded
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Lấy các phần tử HTML cần thiết
+    // DOM Elements
     const timerElement = document.getElementById('timer');
     const webcamElement = document.getElementById('webcam');
     const statusBox = document.getElementById('status-box');
@@ -11,42 +13,108 @@ document.addEventListener('DOMContentLoaded', () => {
     const proctoringContainer = document.getElementById('proctoring-container');
     const startOverlay = document.getElementById('start-test-overlay');
 
-    let faceMeshModel, cocoSsdModel, videoInterval, objectDetectionInterval;
+    // AI Models
+    let faceMeshModel;
+    let cocoSsdModel = null; // Will be loaded lazily
+    let videoInterval, objectDetectionInterval;
     let isSubmitting = false;
 
-    // --- CÁC HẰNG SỐ ĐIỀU CHỈNH ĐỘ NHẠY (ĐÃ CẢI TIẾN) ---
-    // Thông số cho Face Tracking - THOẢI MÁI HƠN
-    const YAW_THRESHOLD = 35;           // Tăng từ 20 -> 35 (cho phép quay đầu tự nhiên hơn)
-    const PITCH_DOWN_THRESHOLD = 25;    // Tăng từ 15 -> 25 (cho phép nhìn xuống bài nhiều hơn)
-    const PITCH_UP_THRESHOLD = 20;      // Ngưỡng riêng cho nhìn lên
-    const CONSECUTIVE_VIOLATIONS = 4;    // Số lần vi phạm liên tiếp mới cảnh báo (thay vì 1 lần)
-    const VIOLATION_RESET_TIME = 3000;  // Reset bộ đếm vi phạm sau 3s (nếu không vi phạm)
+    // ============================================
+    // OPTIMIZED CONFIGURATION
+    // ============================================
     
-    // Thông số cho No Face Detection - THOẢI MÁI HƠN
-    const NO_FACE_DURATION = 5000;      // Tăng từ 2s -> 5s (cho phép rời khỏi camera lâu hơn)
-    const MULTIPLE_FACE_DURATION = 3000; // 3s có nhiều người mới cảnh báo
-    
-    // Thông số cho Object Detection
-    const PHONE_CONFIDENCE = 0.5;       // Độ tin cậy tối thiểu để phát hiện điện thoại
-    const PHONE_DETECTION_DURATION = 2000; // 2s liên tục phát hiện phone mới cảnh báo
-    const OBJECT_SCAN_INTERVAL = 1000;  // Quét object mỗi 1s (tiết kiệm tài nguyên)
-    
-    const LOG_COOLDOWN_MS = 8000;       // Tăng từ 5s -> 8s giữa các lần ghi log
-
-    // --- TRACKING STATES ---
-    let violationCounter = {
-        looking_away: 0,
-        head_down: 0,
-        head_up: 0
+    const CONFIG = {
+        // Face Detection - Intelligent Calibration
+        face: {
+            yawThreshold: 40,
+            pitchDownThreshold: 30,
+            pitchUpThreshold: 25,
+            minViolationDuration: 2500,
+            consecutiveFramesRequired: 5,
+            recoveryFrames: 3,
+            smoothingWindow: 5,
+            outlierThreshold: 2.5,
+        },
+        
+        noFace: {
+            duration: 6000,
+            warningDuration: 3000,
+        },
+        
+        multipleFace: {
+            duration: 4000,
+            confidenceThreshold: 0.7,
+        },
+        
+        object: {
+            enabled: false, // Start with face detection only
+            phoneConfidence: 0.6,
+            phoneDuration: 2500,
+            scanInterval: 2000,
+            bookConfidence: 0.65,
+        },
+        
+        logCooldown: 10000,
+        detectionInterval: 500,
     };
-    let lastNormalTime = Date.now();
-    let noFaceStartTime = null;
-    let multipleFaceStartTime = null;
-    let phoneDetectionStartTime = null;
-    let lastLogTime = {};
-    let isLogging = false;
 
-    // --- PHẦN 1: GIÁM SÁT HỆ THỐNG (GIỮ NGUYÊN) ---
+    // ============================================
+    // TRACKING STATE
+    // ============================================
+    
+    const state = {
+        violations: {
+            looking_away: {
+                count: 0,
+                startTime: null,
+                frames: [],
+                active: false
+            },
+            head_down: {
+                count: 0,
+                startTime: null,
+                frames: [],
+                active: false
+            },
+            head_up: {
+                count: 0,
+                startTime: null,
+                frames: [],
+                active: false
+            }
+        },
+        
+        measurements: {
+            yaw: [],
+            pitch: [],
+            roll: []
+        },
+        
+        face: {
+            lastSeenTime: Date.now(),
+            normalFrames: 0,
+            isPresent: false,
+            count: 0
+        },
+        
+        noFaceStartTime: null,
+        multipleFaceStartTime: null,
+        phoneDetectionStartTime: null,
+        lastLogTime: {},
+        
+        calibration: {
+            isCalibrated: false,
+            samples: [],
+            neutralYaw: 0,
+            neutralPitch: 0,
+            samplesNeeded: 30
+        }
+    };
+
+    // ============================================
+    // SYSTEM MONITORING
+    // ============================================
+    
     let timerInterval = null;
 
     document.addEventListener('visibilitychange', () => {
@@ -79,80 +147,277 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('keydown', (e) => {
         if (!timerInterval) return;
-
         if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i'))) {
             e.preventDefault();
-            logCheating('devtools_key_attempt', 'Cố gắng mở Developer Tools bằng phím tắt.', null);
+            logCheating('devtools_key_attempt', 'Cố gắng mở Developer Tools.', null);
         }
         if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) {
             e.preventDefault();
-            logCheating('print_attempt', 'Cố gắng in trang bằng phím tắt.', null);
+            logCheating('print_attempt', 'Cố gắng in trang.', null);
         }
     });
 
     document.addEventListener('fullscreenchange', () => {
         if (!document.fullscreenElement && timerInterval) {
-            logCheating('fullscreen_exit', 'Người dùng đã thoát khỏi chế độ toàn màn hình.', null);
-            statusBox.textContent = "Cảnh báo: Bạn vừa thoát toàn màn hình!";
+            logCheating('fullscreen_exit', 'Thoát toàn màn hình.', null);
         }
     });
 
-    let devToolsCheckInterval = null;
-    function checkDevTools() {
-        if (!timerInterval) return;
-        const widthThreshold = window.outerWidth - window.innerWidth > 160;
-        const heightThreshold = window.outerHeight - window.innerHeight > 160;
-        if (widthThreshold || heightThreshold) {
-            logCheating('devtools_resize', 'Phát hiện DevTools có thể đang mở.', null);
-        }
-    }
-
-    // --- PHẦN 2: KHỞI TẠO WEBCAM VÀ MÔ HÌNH AI ---
+    // ============================================
+    // CAMERA & MODEL INITIALIZATION - OPTIMIZED
+    // ============================================
 
     async function setupCamera() {
         try {
+            statusBox.textContent = 'Đang khởi động camera...';
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { width: 640, height: 480 }, // Tăng độ phân giải cho object detection
+                video: { 
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    frameRate: { ideal: 24 }
+                }, 
                 audio: false 
             });
             webcamElement.srcObject = stream;
             return new Promise((resolve) => {
-                webcamElement.onloadedmetadata = () => resolve(webcamElement);
+                webcamElement.onloadedmetadata = () => {
+                    console.log('✓ Camera ready');
+                    resolve(webcamElement);
+                };
             });
         } catch (error) {
-            statusBox.textContent = "Lỗi: Không thể truy cập camera.";
-            console.error("Lỗi truy cập camera:", error);
+            statusBox.textContent = "Không thể truy cập camera";
+            console.error("Camera error:", error);
             return null;
         }
     }
 
     async function loadModels() {
-        statusBox.textContent = 'Đang tải mô hình AI nâng cao...';
+        statusBox.textContent = 'Đang tải AI Face Detection (10-20s)...';
+        
         try {
-            // Load Face Mesh Model
+            // Only load Face Mesh initially - it's faster
+            console.log('Loading Face Mesh model...');
+            
             const faceModelType = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
             const faceDetectorConfig = {
                 runtime: 'mediapipe',
                 solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh',
-                maxFaces: 3
+                maxFaces: 3,
+                refineLandmarks: false, // Faster without refinement
+                minDetectionConfidence: 0.6,
+                minTrackingConfidence: 0.6
             };
+            
             faceMeshModel = await faceLandmarksDetection.createDetector(faceModelType, faceDetectorConfig);
-            console.log('✓ Face Mesh model loaded');
+            console.log('Face Mesh loaded successfully');
 
-            // Load COCO-SSD Model for Object Detection
-            cocoSsdModel = await cocoSsd.load();
-            console.log('✓ COCO-SSD model loaded');
-
-            statusBox.textContent = 'Hệ thống giám sát AI đã sẵn sàng (Face + Object Detection).';
+            statusBox.textContent = 'AI sẵn sàng - Đang hiệu chuẩn...';
+            
+            // Load object detection in background (optional)
+            loadObjectDetectionLazy();
+            
             return true;
         } catch (error) {
-            statusBox.textContent = "Lỗi: Không thể tải mô hình AI.";
-            console.error("Lỗi tải mô hình:", error);
+            statusBox.textContent = "Lỗi tải AI model";
+            console.error("Model load error:", error);
+            alert(`Lỗi tải AI model: ${error.message}\n\nVui lòng:\n1. Kiểm tra kết nối internet\n2. Tải lại trang (Ctrl+F5)\n3. Thử trình duyệt khác (Chrome/Edge)`);
             return false;
         }
     }
 
-    // --- PHẦN 3: FACE DETECTION VỚI LOGIC THÔNG MINH HƠN ---
+    // Load object detection in background (non-blocking)
+    async function loadObjectDetectionLazy() {
+        try {
+            console.log('Loading object detection in background...');
+            
+            // Check if cocoSsd is available
+            if (typeof cocoSsd === 'undefined') {
+                console.warn('COCO-SSD library not loaded, skipping object detection');
+                return;
+            }
+            
+            cocoSsdModel = await cocoSsd.load();
+            CONFIG.object.enabled = true;
+            console.log('Object Detection loaded (background)');
+            
+            // Start object detection if test has started
+            if (timerInterval && !objectDetectionInterval) {
+                objectDetectionInterval = setInterval(detectObjects, CONFIG.object.scanInterval);
+            }
+        } catch (error) {
+            console.warn('Object detection disabled:', error.message);
+            CONFIG.object.enabled = false;
+        }
+    }
+
+    // ============================================
+    // ADVANCED FACE ANALYSIS
+    // ============================================
+
+    function calibrateNeutralPosition(yaw, pitch) {
+        if (state.calibration.isCalibrated) return;
+
+        state.calibration.samples.push({ yaw, pitch });
+
+        if (state.calibration.samples.length >= state.calibration.samplesNeeded) {
+            const avgYaw = state.calibration.samples.reduce((sum, s) => sum + s.yaw, 0) / state.calibration.samples.length;
+            const avgPitch = state.calibration.samples.reduce((sum, s) => sum + s.pitch, 0) / state.calibration.samples.length;
+            
+            state.calibration.neutralYaw = avgYaw;
+            state.calibration.neutralPitch = avgPitch;
+            state.calibration.isCalibrated = true;
+            
+            console.log(`Hiệu chuẩn hoàn tất - Neutral: Yaw=${avgYaw.toFixed(2)}, Pitch=${avgPitch.toFixed(2)}`);
+            statusBox.textContent = 'Hệ thống giám sát đã sẵn sàng';
+        } else {
+            const progress = Math.round((state.calibration.samples.length / state.calibration.samplesNeeded) * 100);
+            statusBox.textContent = `Hiệu chuẩn... ${progress}%`;
+        }
+    }
+
+    function smoothMeasurement(type, value) {
+        const buffer = state.measurements[type];
+        buffer.push(value);
+        
+        if (buffer.length > CONFIG.face.smoothingWindow) {
+            buffer.shift();
+        }
+
+        const sorted = [...buffer].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    }
+
+    function calculateHeadPose(keypoints) {
+        const leftEye = keypoints.find(p => p.name === 'leftEye');
+        const rightEye = keypoints.find(p => p.name === 'rightEye');
+        const nose = keypoints.find(p => p.name === 'noseTip');
+        const leftCheek = keypoints.find(p => p.index === 234);
+        const rightCheek = keypoints.find(p => p.index === 454);
+        const chin = keypoints.find(p => p.index === 152);
+        const forehead = keypoints.find(p => p.index === 10);
+
+        if (!leftEye || !rightEye || !nose || !leftCheek || !rightCheek) {
+            return null;
+        }
+
+        // Calculate YAW
+        const noseToLeftDist = Math.abs(nose.x - leftCheek.x);
+        const noseToRightDist = Math.abs(nose.x - rightCheek.x);
+        const rawYaw = Math.atan2(noseToLeftDist - noseToRightDist, noseToLeftDist + noseToRightDist) * (180 / Math.PI);
+        const yaw = smoothMeasurement('yaw', rawYaw);
+
+        // Calculate PITCH
+        const eyeMidY = (leftEye.y + rightEye.y) / 2;
+        const faceHeight = chin && forehead ? Math.abs(chin.y - forehead.y) : 100;
+        const rawPitch = ((nose.y - eyeMidY) / faceHeight) * 100;
+        const pitch = smoothMeasurement('pitch', rawPitch);
+
+        // Calculate ROLL
+        const eyeDeltaY = rightEye.y - leftEye.y;
+        const eyeDeltaX = rightEye.x - leftEye.x;
+        const rawRoll = Math.atan2(eyeDeltaY, eyeDeltaX) * (180 / Math.PI);
+        const roll = smoothMeasurement('roll', rawRoll);
+
+        return { yaw, pitch, roll };
+    }
+
+    function analyzeViolation(pose) {
+        if (!state.calibration.isCalibrated) {
+            calibrateNeutralPosition(pose.yaw, pose.pitch);
+            return null;
+        }
+
+        const yawDeviation = Math.abs(pose.yaw - state.calibration.neutralYaw);
+        const pitchDeviation = pose.pitch - state.calibration.neutralPitch;
+
+        let violation = null;
+
+        const YAW_RIGHT_THRESHOLD = 2.0;
+        const YAW_LEFT_THRESHOLD = 0.45;
+
+        if (yawDeviation > CONFIG.face.yawThreshold) {
+            violation = {
+                type: 'looking_away',
+                severity: yawDeviation > CONFIG.face.yawThreshold * 1.5 ? 'high' : 'medium',
+                details: `Quay đầu ${pose.yaw > state.calibration.neutralYaw ? 'phải' : 'trái'} (${yawDeviation.toFixed(1)}°)`,
+                value: yawDeviation
+            };
+        } else if (pitchDeviation > CONFIG.face.pitchDownThreshold) {
+            violation = {
+                type: 'head_down',
+                severity: pitchDeviation > CONFIG.face.pitchDownThreshold * 1.3 ? 'high' : 'medium',
+                details: `Cúi đầu xuống (${pitchDeviation.toFixed(1)}°)`,
+                value: pitchDeviation
+            };
+        } else if (pitchDeviation < -CONFIG.face.pitchUpThreshold) {
+            violation = {
+                type: 'head_up',
+                severity: pitchDeviation < -CONFIG.face.pitchUpThreshold * 1.3 ? 'high' : 'medium',
+                details: `Ngẩng đầu lên (${Math.abs(pitchDeviation).toFixed(1)}°)`,
+                value: Math.abs(pitchDeviation)
+            };
+        }
+
+        return violation;
+    }
+
+    function processViolation(violation) {
+        if (!violation) {
+            Object.keys(state.violations).forEach(key => {
+                const v = state.violations[key];
+                v.frames.push(false);
+                
+                if (v.frames.length > CONFIG.face.smoothingWindow) {
+                    v.frames.shift();
+                }
+                
+                const recentNormalCount = v.frames.slice(-CONFIG.face.recoveryFrames).filter(f => !f).length;
+                if (recentNormalCount === CONFIG.face.recoveryFrames) {
+                    v.active = false;
+                    v.count = 0;
+                    v.startTime = null;
+                }
+            });
+            
+            state.face.normalFrames++;
+            if (state.face.normalFrames > 10 && statusBox.textContent.includes('⚠️')) {
+                statusBox.textContent = 'Tư thế bình thường';
+            }
+            return;
+        }
+
+        state.face.normalFrames = 0;
+        const v = state.violations[violation.type];
+        v.frames.push(true);
+        
+        if (v.frames.length > CONFIG.face.smoothingWindow) {
+            v.frames.shift();
+        }
+
+        const recentViolationCount = v.frames.slice(-CONFIG.face.consecutiveFramesRequired).filter(f => f).length;
+        
+        if (!v.active && recentViolationCount === CONFIG.face.consecutiveFramesRequired) {
+            v.active = true;
+            v.startTime = Date.now();
+            v.count++;
+        }
+
+        if (v.active) {
+            const duration = Date.now() - v.startTime;
+            statusBox.textContent = `⚠️ ${violation.details} (${(duration/1000).toFixed(1)}s)`;
+            
+            if (duration > CONFIG.face.minViolationDuration && canLogViolation(violation.type)) {
+                const imageData = captureFrame();
+                logCheating(
+                    violation.type,
+                    `${violation.details} - Kéo dài ${(duration/1000).toFixed(1)}s (Mức độ: ${violation.severity})`,
+                    imageData
+                );
+            }
+        }
+    }
 
     async function detectFaces() {
         if (!faceMeshModel || !webcamElement || webcamElement.readyState < 2) return;
@@ -160,212 +425,125 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const predictions = await faceMeshModel.estimateFaces(webcamElement, { flipHorizontal: false });
 
-            // Case 1: Không tìm thấy khuôn mặt
+            state.face.count = predictions.length;
+            state.face.isPresent = predictions.length > 0;
+
+            // No face
             if (predictions.length === 0) {
-                if (!noFaceStartTime) {
-                    noFaceStartTime = Date.now();
+                if (!state.noFaceStartTime) {
+                    state.noFaceStartTime = Date.now();
                 }
                 
-                const noFaceDuration = Date.now() - noFaceStartTime;
-                if (noFaceDuration > NO_FACE_DURATION) {
-                    statusBox.textContent = `⚠️ Không tìm thấy khuôn mặt (${Math.floor(noFaceDuration/1000)}s)`;
-                    if (canLogViolation('no_face_detected')) {
-                        const imageData = captureFrame();
-                        logCheating('no_face_detected', `Không tìm thấy khuôn mặt trong ${Math.floor(noFaceDuration/1000)} giây.`, imageData);
-                    }
+                const duration = Date.now() - state.noFaceStartTime;
+                
+                if (duration > CONFIG.noFace.warningDuration) {
+                    statusBox.textContent = `Không tìm thấy khuôn mặt (${Math.floor(duration/1000)}s)`;
+                }
+                
+                if (duration > CONFIG.noFace.duration && canLogViolation('no_face_detected')) {
+                    const imageData = captureFrame();
+                    logCheating('no_face_detected', `Không tìm thấy khuôn mặt trong ${Math.floor(duration/1000)}s`, imageData);
                 }
                 return;
-            } else {
-                noFaceStartTime = null; // Reset no face timer
             }
+            
+            state.noFaceStartTime = null;
 
-            // Case 2: Phát hiện nhiều người
+            // Multiple faces
             if (predictions.length > 1) {
-                if (!multipleFaceStartTime) {
-                    multipleFaceStartTime = Date.now();
+                if (!state.multipleFaceStartTime) {
+                    state.multipleFaceStartTime = Date.now();
                 }
                 
-                const multipleFaceDuration = Date.now() - multipleFaceStartTime;
-                if (multipleFaceDuration > MULTIPLE_FACE_DURATION) {
-                    statusBox.textContent = `⚠️ Phát hiện ${predictions.length} người!`;
-                    if (canLogViolation('multiple_faces')) {
-                        const imageData = captureFrame();
-                        logCheating('multiple_faces', `Phát hiện ${predictions.length} người trong khung hình.`, imageData);
-                    }
+                const duration = Date.now() - state.multipleFaceStartTime;
+                statusBox.textContent = `Phát hiện ${predictions.length} người (${Math.floor(duration/1000)}s)`;
+                
+                if (duration > CONFIG.multipleFace.duration && canLogViolation('multiple_faces')) {
+                    const imageData = captureFrame();
+                    logCheating('multiple_faces', `Phát hiện ${predictions.length} người trong ${Math.floor(duration/1000)}s`, imageData);
                 }
                 return;
-            } else {
-                multipleFaceStartTime = null; // Reset multiple face timer
             }
+            
+            state.multipleFaceStartTime = null;
 
-            // Case 3: Phân tích tư thế khuôn mặt (1 người)
+            // Analyze pose
             const face = predictions[0];
-            const keypoints = face.keypoints;
-
-            const leftEye = keypoints.find(p => p.name === 'leftEye');
-            const rightEye = keypoints.find(p => p.name === 'rightEye');
-            const nose = keypoints.find(p => p.name === 'noseTip');
-            const leftCheek = keypoints.find(p => p.index === 234);
-            const rightCheek = keypoints.find(p => p.index === 454);
-
-            if (!leftEye || !rightEye || !nose || !leftCheek || !rightCheek) {
-                return;
-            }
-
-            // Tính toán các chỉ số tư thế
-            const noseToLeftDist = Math.abs(nose.x - leftCheek.x);
-            const noseToRightDist = Math.abs(nose.x - rightCheek.x);
-            const yawRatio = (noseToLeftDist + 1) / (noseToRightDist + 1);
-
-            const eyeMidY = (leftEye.y + rightEye.y) / 2;
-            const pitchOffset = nose.y - eyeMidY;
-
-            // Phát hiện vi phạm với ngưỡng mới
-            let violation = null;
-
-            const YAW_RIGHT_THRESHOLD = 2.0;  // Thoải mái hơn
-            const YAW_LEFT_THRESHOLD = 0.45;  // Thoải mái hơn
-
-            if (yawRatio > YAW_RIGHT_THRESHOLD || yawRatio < YAW_LEFT_THRESHOLD) {
-                violation = {
-                    type: 'looking_away',
-                    details: `Quay đầu sang ngang (Tỷ lệ: ${yawRatio.toFixed(2)})`,
-                    severity: Math.abs(yawRatio - 1.0) > 1.5 ? 'high' : 'medium'
-                };
-            } else if (pitchOffset > PITCH_DOWN_THRESHOLD) {
-                violation = {
-                    type: 'head_down',
-                    details: `Cúi đầu xuống (Độ lệch: ${pitchOffset.toFixed(2)})`,
-                    severity: pitchOffset > 35 ? 'high' : 'medium'
-                };
-            } else if (pitchOffset < -PITCH_UP_THRESHOLD) {
-                violation = {
-                    type: 'head_up',
-                    details: `Ngẩng đầu lên (Độ lệch: ${pitchOffset.toFixed(2)})`,
-                    severity: pitchOffset < -30 ? 'high' : 'medium'
-                };
-            }
-
-            // Xử lý vi phạm với bộ đếm
-            if (violation) {
-                violationCounter[violation.type]++;
-                
-                // Chỉ cảnh báo sau khi vi phạm liên tiếp
-                if (violationCounter[violation.type] >= CONSECUTIVE_VIOLATIONS) {
-                    statusBox.textContent = `⚠️ ${violation.details}`;
-                    
-                    if (canLogViolation(violation.type)) {
-                        const imageData = captureFrame();
-                        logCheating(
-                            violation.type, 
-                            `${violation.details} (Mức độ: ${violation.severity})`, 
-                            imageData
-                        );
-                    }
-                }
-                
-                lastNormalTime = Date.now();
-            } else {
-                // Reset bộ đếm nếu đã ở tư thế bình thường đủ lâu
-                if (Date.now() - lastNormalTime > VIOLATION_RESET_TIME) {
-                    violationCounter = {
-                        looking_away: 0,
-                        head_down: 0,
-                        head_up: 0
-                    };
-                    if (statusBox.textContent.startsWith('⚠️')) {
-                        statusBox.textContent = '✓ Tư thế bình thường';
-                    }
-                }
-                lastNormalTime = Date.now();
+            const pose = calculateHeadPose(face.keypoints);
+            
+            if (pose) {
+                const violation = analyzeViolation(pose);
+                processViolation(violation);
             }
 
         } catch (error) {
-            console.error("Lỗi trong detectFaces:", error);
+            console.error("Face detection error:", error);
         }
     }
 
-    // --- PHẦN 4: OBJECT DETECTION (MỚI) ---
+    // ============================================
+    // OBJECT DETECTION (Optional)
+    // ============================================
 
     async function detectObjects() {
-        if (!cocoSsdModel || !webcamElement || webcamElement.readyState < 2) return;
+        if (!CONFIG.object.enabled || !cocoSsdModel || !webcamElement || webcamElement.readyState < 2) return;
         
         try {
             const predictions = await cocoSsdModel.detect(webcamElement);
             
-            // Tìm các object đáng ngờ
             const suspiciousObjects = predictions.filter(pred => {
                 const label = pred.class.toLowerCase();
                 return (
-                    (label === 'cell phone' || label === 'phone') && pred.score > PHONE_CONFIDENCE ||
-                    label === 'book' && pred.score > 0.6 ||
-                    label === 'laptop' && pred.score > 0.6
+                    (label.includes('phone') || label === 'cell phone') && pred.score > CONFIG.object.phoneConfidence ||
+                    label === 'book' && pred.score > CONFIG.object.bookConfidence ||
+                    label === 'laptop' && pred.score > 0.65
                 );
             });
 
             if (suspiciousObjects.length > 0) {
-                const phoneDetected = suspiciousObjects.some(obj => 
-                    obj.class.toLowerCase().includes('phone')
-                );
+                const phoneDetected = suspiciousObjects.some(obj => obj.class.toLowerCase().includes('phone'));
 
                 if (phoneDetected) {
-                    if (!phoneDetectionStartTime) {
-                        phoneDetectionStartTime = Date.now();
+                    if (!state.phoneDetectionStartTime) {
+                        state.phoneDetectionStartTime = Date.now();
                     }
 
-                    const phoneDuration = Date.now() - phoneDetectionStartTime;
+                    const duration = Date.now() - state.phoneDetectionStartTime;
                     
-                    if (phoneDuration > PHONE_DETECTION_DURATION) {
-                        statusBox.textContent = `🚨 Phát hiện điện thoại trong tay!`;
+                    if (duration > CONFIG.object.phoneDuration) {
+                        statusBox.textContent = `Phát hiện sử dụng điện thoại!`;
                         
                         if (canLogViolation('phone_detected')) {
                             const imageData = captureFrame();
-                            const objectDetails = suspiciousObjects.map(obj => 
+                            const details = suspiciousObjects.map(obj => 
                                 `${obj.class} (${(obj.score * 100).toFixed(0)}%)`
                             ).join(', ');
                             
-                            logCheating(
-                                'phone_detected',
-                                `Phát hiện vật dụng không được phép: ${objectDetails}`,
-                                imageData
-                            );
+                            logCheating('phone_detected', `Vật dụng không được phép: ${details}`, imageData);
                         }
-                    }
-                } else {
-                    // Phát hiện vật khác (sách, laptop...)
-                    if (canLogViolation('suspicious_object')) {
-                        statusBox.textContent = `⚠️ Phát hiện vật dụng đáng ngờ`;
-                        const imageData = captureFrame();
-                        const objectDetails = suspiciousObjects.map(obj => 
-                            `${obj.class} (${(obj.score * 100).toFixed(0)}%)`
-                        ).join(', ');
-                        
-                        logCheating(
-                            'suspicious_object',
-                            `Phát hiện: ${objectDetails}`,
-                            imageData
-                        );
                     }
                 }
             } else {
-                phoneDetectionStartTime = null;
+                state.phoneDetectionStartTime = null;
             }
 
         } catch (error) {
-            console.error("Lỗi trong detectObjects:", error);
+            console.error("Object detection error:", error);
         }
     }
 
-    // --- PHẦN 5: HELPER FUNCTIONS ---
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
 
     function canLogViolation(type) {
-        if (isLogging) return false;
+        if (isSubmitting) return false;
         
-        const lastLog = lastLogTime[type] || 0;
-        const timeSinceLastLog = Date.now() - lastLog;
+        const lastLog = state.lastLogTime[type] || 0;
+        const timeSince = Date.now() - lastLog;
         
-        if (timeSinceLastLog > LOG_COOLDOWN_MS) {
-            lastLogTime[type] = Date.now();
+        if (timeSince > CONFIG.logCooldown) {
+            state.lastLogTime[type] = Date.now();
             return true;
         }
         return false;
@@ -378,22 +556,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 captureCanvas.width = webcamElement.videoWidth;
                 captureCanvas.height = webcamElement.videoHeight;
                 context.drawImage(webcamElement, 0, 0, captureCanvas.width, captureCanvas.height);
-                return captureCanvas.toDataURL('image/jpeg', 0.8);
+                return captureCanvas.toDataURL('image/jpeg', 0.85);
             }
         } catch (e) {
-            console.error("Lỗi khi chụp ảnh:", e);
-            return null;
+            console.error("Capture error:", e);
         }
         return null;
     }
 
     async function logCheating(type, details, imageData) {
-        if (isSubmitting) {
-            console.log("Đang nộp bài, bỏ qua ghi log.");
-            return;
-        }
+        if (isSubmitting) return;
 
-        console.log(`📸 Phát hiện vi phạm: ${type} - ${details}`);
+        console.log(`📸 Violation logged: ${type} - ${details}`);
+        
         const formData = new FormData();
         formData.append('attempt_id', ATTEMPT_ID);
         formData.append('violation_type', type);
@@ -403,52 +578,70 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const response = await fetch('log_cheating.php', { method: 'POST', body: formData });
+            const response = await fetch('log_cheating.php', { 
+                method: 'POST', 
+                body: formData 
+            });
+            
             if (!response.ok) {
-                console.error(`Lỗi HTTP: ${response.status}`);
+                console.error(`HTTP error: ${response.status}`);
             }
         } catch (error) {
-            console.error('Lỗi mạng khi gửi log:', error);
+            console.error('Network error:', error);
         }
     }
 
-    // --- PHẦN 6: HÀM KHỞI CHẠY CHÍNH ---
+    // ============================================
+    // MAIN INITIALIZATION
+    // ============================================
 
     async function main() {
+        console.log('Starting proctoring system...');
+        
         const cameraReady = await setupCamera();
         if (!cameraReady) {
-            alert("Không thể truy cập camera. Vui lòng cấp quyền và tải lại trang.");
+            alert("Không thể truy cập camera. Vui lòng cấp quyền và tải lại.");
             return;
         }
 
         const modelsReady = await loadModels();
         if (!modelsReady) {
-            alert("Không thể tải mô hình AI. Vui lòng kiểm tra kết nối mạng.");
-            return;
+            return; // Alert already shown in loadModels
         }
 
         startTimer();
         
-        // Face detection chạy thường xuyên hơn (mỗi 600ms)
-        videoInterval = setInterval(detectFaces, 600);
+        // Start face detection
+        videoInterval = setInterval(detectFaces, CONFIG.detectionInterval);
         
-        // Object detection chạy ít hơn để tiết kiệm tài nguyên (mỗi 1s)
-        objectDetectionInterval = setInterval(detectObjects, OBJECT_SCAN_INTERVAL);
+        // Object detection will start automatically when loaded
         
-        devToolsCheckInterval = setInterval(checkDevTools, 2000);
-
-        console.log('🚀 Hệ thống giám sát AI đã khởi động');
+        console.log('✓ Proctoring system active');
+        console.log('📊 Face detection: ACTIVE');
+        console.log('📊 Object detection: Loading in background...');
     }
 
-    // --- PHẦN 7: TIMER VÀ FORM SUBMISSION ---
+    // ============================================
+    // TIMER & FORM HANDLING
+    // ============================================
 
     function startTimer() {
         let timeLeft = DURATION;
         timerInterval = setInterval(() => {
             timeLeft--;
-            const minutes = Math.floor(timeLeft / 60);
+            const hours = Math.floor(timeLeft / 3600);
+            const minutes = Math.floor((timeLeft % 3600) / 60);
             const seconds = timeLeft % 60;
-            timerElement.textContent = `Thời gian: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            let timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            if (hours > 0) timeString = `${hours}:${timeString}`;
+            
+            timerElement.textContent = timeString;
+            
+            if (timeLeft <= 300) {
+                timerElement.style.background = '#e74c3c';
+                timerElement.style.color = 'white';
+            }
 
             if (timeLeft <= 0) {
                 endTest();
@@ -461,7 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearInterval(timerInterval);
         if (videoInterval) clearInterval(videoInterval);
         if (objectDetectionInterval) clearInterval(objectDetectionInterval);
-        if (devToolsCheckInterval) clearInterval(devToolsCheckInterval);
+        
         alert('Hết giờ làm bài!');
         testForm.submit();
     }
@@ -474,12 +667,11 @@ document.addEventListener('DOMContentLoaded', () => {
             proctoringContainer.style.display = 'block';
             main();
         }).catch(err => {
-            alert(`Không thể vào chế độ toàn màn hình. Lỗi: ${err.message}`);
+            alert(`❌ Không thể vào toàn màn hình: ${err.message}`);
         });
     });
 
     testForm.addEventListener('submit', () => {
         isSubmitting = true;
     });
-
 });

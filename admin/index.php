@@ -53,7 +53,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - OnlineTest AI</title>
+    <title>Admin Dashboard - OnlineTest vn</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -70,7 +70,7 @@ try {
         </div>
         <nav class="flex-1 py-6 px-3 space-y-1">
             <a href="index.php" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-500/20">
-                <i class="fa-solid fa-gauge-high w-6 text-center mr-2"></i> Dashboard
+                <i class="fa-solid fa-gauge-high w-6 text-center mr-2"></i> Trang quản lý
             </a>
             <a href="manage_users.php" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
                 <i class="fa-solid fa-users-gear w-6 text-center mr-2"></i> Quản lý Users
@@ -86,7 +86,7 @@ try {
             </a>
         </nav>
         <div class="p-4 border-t border-slate-700">
-            <a href="../logout.php" class="flex items-center text-slate-400 hover:text-red-400 transition-colors text-sm font-medium">
+            <a href="/auth/logout.php" class="flex items-center text-slate-400 hover:text-red-400 transition-colors text-sm font-medium">
                 <i class="fa-solid fa-right-from-bracket mr-2"></i> Đăng xuất
             </a>
         </div>

@@ -140,9 +140,9 @@ $tests = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <input type="hidden" name="test_id" value="<?php echo $test['id']; ?>">
                                         <input type="hidden" name="class_id" value="<?php echo $class['id']; ?>">
                                         <select name="status" onchange="this.form.submit()" class="text-xs rounded-full px-3 py-1 border focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer <?php echo $currentClass; ?>">
-                                            <option value="draft" <?php echo $test['status'] == 'draft' ? 'selected' : ''; ?>>📝 Nháp (Ẩn)</option>
-                                            <option value="published" <?php echo $test['status'] == 'published' ? 'selected' : ''; ?>>✅ Đang mở (Công khai)</option>
-                                            <option value="closed" <?php echo $test['status'] == 'closed' ? 'selected' : ''; ?>>🔒 Đã đóng</option>
+                                            <option value="draft" <?php echo $test['status'] == 'draft' ? 'selected' : ''; ?>>Nháp (Ẩn)</option>
+                                            <option value="published" <?php echo $test['status'] == 'published' ? 'selected' : ''; ?>>Đang mở (Công khai)</option>
+                                            <option value="closed" <?php echo $test['status'] == 'closed' ? 'selected' : ''; ?>>Đã đóng</option>
                                         </select>
                                     </form>
                                 </td>

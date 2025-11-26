@@ -140,8 +140,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <!-- Header -->
         <div class="text-center mb-8">
             <a href="/" class="inline-flex items-center gap-2 group cursor-pointer">
-                <i class="fa-solid fa-brain text-3xl text-indigo-500 group-hover:scale-110 transition-transform duration-300"></i>
-                <span class="font-['Space_Grotesk'] font-bold text-2xl tracking-tighter text-white">OnlineTest<span class="text-indigo-500">.AI</span></span>
+                <i class="fa-solid text-3xl text-indigo-500 group-hover:scale-110 transition-transform duration-300"></i>
+                <span class="font-['Space_Grotesk'] font-bold text-2xl tracking-tighter text-white">OnlineTest<span class="text-indigo-500">.vn</span></span>
             </a>
             <h2 class="text-2xl font-bold mt-4 text-white">Tạo tài khoản mới</h2>
             <p class="text-gray-400 text-sm">Tham gia nền tảng thi cử tương lai</p>
