@@ -356,6 +356,16 @@ $answers_stmt = $pdo->prepare("SELECT * FROM answers WHERE question_id = ? ORDER
             document.getElementById('alert-modal').style.display = 'none';
         }
     </script>
+    <script src="../js/exam_security.js"></script>
+
+<script>
+    // Lấy ID lượt thi từ PHP (giả sử bạn có biến $attempt_id trong file php)
+    const currentAttemptId = <?php echo $attempt_id; ?>;
     
+    // Kích hoạt giám sát ngay khi trang tải xong
+    document.addEventListener('DOMContentLoaded', function() {
+        startExamMonitor(currentAttemptId);
+    });
+</script>
 </body>
 </html>

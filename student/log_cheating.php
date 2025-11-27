@@ -72,7 +72,7 @@ try {
             http_response_code(500);
             error_log("Lỗi xử lý ảnh: " . $e->getMessage());
             echo json_encode(['status' => 'error', 'message' => 'Lỗi máy chủ khi xử lý ảnh.']);
-            exit();
+            
         }
     }
 
@@ -82,18 +82,69 @@ try {
     );
     $stmt->execute([$attempt_id, $log_type, $details, $proof_image_path]);
 
-    http_response_code(200);
-    echo json_encode(['status' => 'success', 'message' => 'Log đã được ghi nhận.']);
+    // --- 3. LOGIC TỰ ĐỘNG ĐÌNH CHỈ (AUTO BAN) ---
+    // Lấy cấu hình phạt của bài thi này
+    $stmt = $pdo->prepare("
+        SELECT t.suspension_rules 
+        FROM test_attempts ta 
+        JOIN tests t ON ta.test_id = t.id 
+        WHERE ta.id = ?
+    ");
+    $stmt->execute([$attempt_id]);
+    $rules_json = $stmt->fetchColumn();
 
-} catch (Throwable $t) { // Bắt tất cả các loại lỗi
+    $is_suspended = false;
+    $suspend_reason = "";
+
+    if ($rules_json) {
+        $rules = json_decode($rules_json, true);
+        
+        // Kiểm tra xem lỗi hiện tại có nằm trong quy tắc phạt không
+        if (isset($rules[$log_type]) && intval($rules[$log_type]) > 0) {
+            $limit = intval($rules[$log_type]);
+            
+            // Đếm tổng số lần vi phạm lỗi này của thí sinh
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM cheating_logs WHERE attempt_id = ? AND log_type = ?");
+            $stmt->execute([$attempt_id, $log_type]);
+            $current_count = $stmt->fetchColumn();
+
+            // Nếu vượt quá giới hạn -> ĐÌNH CHỈ
+            if ($current_count >= $limit) {
+                $is_suspended = true;
+                $suspend_reason = "Hệ thống tự động đình chỉ: Vi phạm lỗi '$log_type' quá $limit lần.";
+                
+                // Cập nhật trạng thái bài thi: suspended, điểm = 0, kết thúc ngay lập tức
+                $stmt = $pdo->prepare("
+                    UPDATE test_attempts 
+                    SET status = 'suspended', score = 0, end_time = NOW() 
+                    WHERE id = ?
+                ");
+                $stmt->execute([$attempt_id]);
+            }
+        }
+    }
+
+    http_response_code(200);
+    
+    // Trả về kết quả, nếu bị đình chỉ thì frontend sẽ xử lý redirect
+    if ($is_suspended) {
+        echo json_encode([
+            'status' => 'suspended', 
+            'message' => $suspend_reason
+        ]);
+    } else {
+        echo json_encode([
+            'status' => 'success', 
+            'message' => 'Log đã được ghi nhận.'
+        ]);
+    }
+
+} catch (Throwable $t) {
     http_response_code(500);
-    // Ghi lại lỗi thực tế vào log của server
     error_log("Lỗi nghiêm trọng trong log_cheating.php: " . $t->getMessage());
-    // Trả về thông báo lỗi chi tiết trong JSON
     echo json_encode([
         'status' => 'error', 
         'message' => 'Lỗi máy chủ nghiêm trọng.',
-        // === SỬA LỖI MỚI: Đảm bảo message là UTF-8 ===
         'details' => mb_convert_encoding($t->getMessage(), 'UTF-8', 'auto')
     ]);
     exit();

@@ -54,7 +54,7 @@ unset($_SESSION['success_msg']);
     <!-- SIDEBAR -->
     <aside class="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col z-10">
         <div class="h-16 flex items-center px-6 border-b border-gray-100">
-            <i class="fa-solid fa-graduation-cap text-indigo-600 text-2xl mr-2"></i>
+            <i class="fa-solid text-indigo-600 text-2xl mr-2"></i>
             <span class="text-xl font-bold text-slate-800">OnlineTest</span>
         </div>
         <nav class="flex-1 py-6 px-3 space-y-1">

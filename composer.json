@@ -4,6 +4,7 @@
     "require": {
         "google/apiclient": "^2.18",
         "phpoffice/phpspreadsheet": "^5.2",
-        "phpoffice/phpword": "^1.4"
+        "phpoffice/phpword": "^1.4",
+        "smalot/pdfparser": "^2.12"
     }
 }

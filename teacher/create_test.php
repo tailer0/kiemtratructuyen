@@ -18,8 +18,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] != 'teacher') {
     exit();
 }
 
-// 1. BẮT BUỘC PHẢI CÓ CLASS_ID (CHẶN BÀI THI TỰ DO)
-// Kiểm tra cả GET (khi mới vào) và POST (khi submit form)
+// 1. BẮT BUỘC PHẢI CÓ CLASS_ID
 $url_class_id = null;
 if (isset($_GET['class_id'])) {
     $url_class_id = intval($_GET['class_id']);
@@ -27,10 +26,9 @@ if (isset($_GET['class_id'])) {
     $url_class_id = intval($_POST['class_id']);
 }
 
-// Nếu không có class_id, đuổi về trang chủ ngay lập tức
 if (!$url_class_id) {
     $_SESSION['error_msg'] = "Bạn phải chọn một lớp học để tạo bài kiểm tra!";
-    header('Location: index.php'); // Hoặc dashboard.php
+    header('Location: index.php');
     exit();
 }
 
@@ -39,80 +37,55 @@ $success_message = '';
 $imported_data_json_for_js = 'null';
 $debug_log = []; 
 
-// --- KIỂM TRA DỮ LIỆU/LỖI IMPORT TỪ SESSION ---
+// --- XỬ LÝ SESSION IMPORT ---
 if (isset($_SESSION['imported_test_json'])) {
     $imported_data_json_for_js = $_SESSION['imported_test_json'];
     unset($_SESSION['imported_test_json']);
-
     if (isset($_SESSION['import_success_message'])) {
         $success_message = $_SESSION['import_success_message'];
         unset($_SESSION['import_success_message']);
     }
-    
-    if (isset($_SESSION['debug_log'])) {
-        $debug_log = $_SESSION['debug_log'];
-        unset($_SESSION['debug_log']);
-    }
-
 } elseif (isset($_SESSION['import_error_message'])) {
     $error_message = $_SESSION['import_error_message'];
     unset($_SESSION['import_error_message']);
-    
-    if (isset($_SESSION['debug_log'])) {
-        $debug_log = $_SESSION['debug_log'];
-        unset($_SESSION['debug_log']);
-    }
 }
 
-// --- PHÂN BIỆT LOẠI POST REQUEST ---
 $is_word_upload_request = ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_word_file']));
 $is_manual_save_request = ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_manual_test']));
 
-// --- HÀM PHỤ TRỢ ĐỌC VĂN BẢN TỪ ELEMENT ---
+// --- HÀM PHỤ TRỢ (Giữ nguyên) ---
 function extractTextFromElement($element) {
     $text = '';
-    if ($element instanceof Text) {
-        return $element->getText();
-    }
-    if ($element instanceof TextRun) {
-        return $element->getText();
-    }
+    if ($element instanceof Text) return $element->getText();
+    if ($element instanceof TextRun) return $element->getText();
     if ($element instanceof AbstractContainer) {
-        try {
-            $reflection = new ReflectionClass($element);
-            if ($reflection->hasMethod('getElements')) {
-                foreach ($element->getElements() as $innerElement) {
-                    $text .= extractTextFromElement($innerElement);
-                }
+        if (method_exists($element, 'getElements')) {
+            foreach ($element->getElements() as $innerElement) {
+                $text .= extractTextFromElement($innerElement);
             }
-        } catch (ReflectionException $e) {
-            error_log("ReflectionException: " . $e->getMessage());
         }
     }
     return $text;
 }
 
-// --- HÀM PHÂN TÍCH FILE WORD (GIỮ NGUYÊN LOGIC CŨ CỦA BẠN) ---
+// --- HÀM PARSE WORD (Giữ nguyên logic) ---
 function parseWordFile($filePath, &$debug_log) {
-    $debug_log[] = "========== BẮT ĐẦU PHÂN TÍCH FILE ==========";
     $phpWord = IOFactory::load($filePath);
     $originalFileName = pathinfo($filePath, PATHINFO_FILENAME);
     
     $test_data = [
         'title' => 'Bài kiểm tra - ' . $originalFileName,
         'duration' => 45,
+        'max_score' => 10, // Mặc định thang điểm 10 khi import
         'questions' => []
     ];
     
     $current_question = null;
-    $line_number = 0;
     $pending_tag = ''; 
     
     foreach ($phpWord->getSections() as $section) {
         foreach ($section->getElements() as $element) {
-            $line_number++;
             $raw_text = trim(extractTextFromElement($element));
-            
             if (empty($raw_text)) continue;
             
             $raw_text = preg_replace('/\\\\+/', ' ', $raw_text); 
@@ -121,11 +94,9 @@ function parseWordFile($filePath, &$debug_log) {
             
             $split_texts = preg_split('/(?=(?:\[[^\]]+\]\s*)?\d+\.\s+)/', $raw_text, -1, PREG_SPLIT_NO_EMPTY);
             
-            $chunk_index = 0;
             foreach ($split_texts as $text_chunk) {
                 $text = trim($text_chunk);
                 if (empty($text)) continue;
-                $chunk_index++;
                 
                 if (preg_match('/^\[([^\]]+)\]$/s', $text, $tag_match)) {
                     $pending_tag = strtoupper(trim($tag_match[1]));
@@ -140,18 +111,12 @@ function parseWordFile($filePath, &$debug_log) {
                     }
                     
                     $tag = '';
-                    if (!empty($pending_tag)) {
-                        $tag = $pending_tag;
-                        $pending_tag = '';
-                    } elseif (!empty(trim($q_matches[1] ?? ''))) {
-                        $tag = strtoupper(trim($q_matches[1]));
-                    } elseif (!empty(trim($q_matches[3] ?? ''))) {
-                        $tag = strtoupper(trim($q_matches[3]));
-                    }
+                    if (!empty($pending_tag)) { $tag = $pending_tag; $pending_tag = ''; }
+                    elseif (!empty(trim($q_matches[1] ?? ''))) $tag = strtoupper(trim($q_matches[1]));
+                    elseif (!empty(trim($q_matches[3] ?? ''))) $tag = strtoupper(trim($q_matches[3]));
                     
-                    $question_text_raw = trim($q_matches[4]);
-                    $question_text = $question_text_raw;
-                    if (preg_match('/^(.+?)\s+[A-Z]\.\s+/s', $question_text_raw, $split_match)) {
+                    $question_text = trim($q_matches[4]);
+                    if (preg_match('/^(.+?)\s+[A-Z]\.\s+/s', $question_text, $split_match)) {
                         $question_text = trim($split_match[1]);
                     }
                     
@@ -167,6 +132,7 @@ function parseWordFile($filePath, &$debug_log) {
                     $current_question = [
                         'text' => $question_text,
                         'type' => $question_type,
+                        'points' => 1, // Mặc định mỗi câu 1 điểm khi import
                         'audio_required' => $audio_required,
                         'answers' => [],
                         'correct' => []
@@ -174,17 +140,9 @@ function parseWordFile($filePath, &$debug_log) {
                     
                     if (preg_match_all('/([A-Z])\.\s*(.+?)(?=\s+[A-Z]\.\s+|$)/s', $text, $a_matches, PREG_SET_ORDER)) {
                         foreach ($a_matches as $a_match) {
-                            $raw_answer_text = trim($a_match[2]);
-                            $raw_answer_text = preg_replace('/\s*\\\\\s*/', ' ', $raw_answer_text);
-                            $raw_answer_text = preg_replace('/\s+/', ' ', $raw_answer_text);
-                            
-                            $is_correct = false;
-                            if (strpos($raw_answer_text, '*') !== false) {
-                                $is_correct = true;
-                                $answer_text = trim(str_replace('*', '', $raw_answer_text), " \t\n\r\0\x0B.,?!;");
-                            } else {
-                                $answer_text = rtrim($raw_answer_text, " \t\n\r\0\x0B.,?!;");
-                            }
+                            $raw_answer = trim($a_match[2]);
+                            $is_correct = strpos($raw_answer, '*') !== false;
+                            $answer_text = trim(str_replace('*', '', $raw_answer), " \t\n\r\0\x0B.,?!;");
                             
                             if (empty($answer_text)) continue;
                             
@@ -201,35 +159,25 @@ function parseWordFile($filePath, &$debug_log) {
                         }
                     }
                 } elseif ($current_question !== null && preg_match('/^([A-Z])\.\s*(.+)/is', $text, $matches)) {
-                    // Xử lý đáp án dòng riêng lẻ
-                     $raw_answer_text = trim($matches[2]);
-                     $is_correct = false;
-                     if (strpos($raw_answer_text, '*') !== false) {
-                         $is_correct = true;
-                         $answer_text = trim(str_replace('*', '', $raw_answer_text), " \t\n\r\0\x0B.,?!;");
-                     } else {
-                         $answer_text = rtrim($raw_answer_text, " \t\n\r\0\x0B.,?!;");
-                     }
-                     
-                     if (!empty($answer_text)) {
-                         $answer_key = count($current_question['answers']);
-                         $current_question['answers'][$answer_key] = $answer_text;
-                         if ($is_correct) {
-                             if ($current_question['type'] === 'single_choice') {
-                                 $current_question['correct'] = [(string)$answer_key];
-                             } else {
-                                 $current_question['correct'][] = (string)$answer_key;
-                             }
-                         }
-                     }
+                      $raw_answer = trim($matches[2]);
+                      $is_correct = strpos($raw_answer, '*') !== false;
+                      $answer_text = trim(str_replace('*', '', $raw_answer), " \t\n\r\0\x0B.,?!;");
+                      
+                      if (!empty($answer_text)) {
+                          $answer_key = count($current_question['answers']);
+                          $current_question['answers'][$answer_key] = $answer_text;
+                          if ($is_correct) {
+                              if ($current_question['type'] === 'single_choice') $current_question['correct'] = [(string)$answer_key];
+                              else $current_question['correct'][] = (string)$answer_key;
+                          }
+                      }
                 } elseif ($current_question !== null) {
-                    // Nối text vào câu hỏi hoặc đáp án cuối
                     if (empty($current_question['answers'])) {
                         $current_question['text'] .= "\n" . $text;
                     } else {
-                        $last_answer_key = count($current_question['answers']) - 1;
-                        if (isset($current_question['answers'][$last_answer_key])) {
-                            $current_question['answers'][$last_answer_key] .= "\n" . $text;
+                        $last_key = count($current_question['answers']) - 1;
+                        if (isset($current_question['answers'][$last_key])) {
+                            $current_question['answers'][$last_key] .= "\n" . $text;
                         }
                     }
                 }
@@ -255,86 +203,55 @@ function validateQuestion($question) {
     return true;
 }
 
-// --- XỬ LÝ UPLOAD FILE WORD ---
+// --- XỬ LÝ UPLOAD FILE ---
 if ($is_word_upload_request) {
+    // (Logic upload giữ nguyên, chỉ đảm bảo JSON có trường points mặc định)
     unset($_SESSION['imported_test_json']);
-    unset($_SESSION['import_success_message']);
-    unset($_SESSION['import_error_message']);
-    unset($_SESSION['debug_log']);
-
-    $current_error = '';
-    $current_success = '';
-
-    // TẠO URL REDIRECT ĐỂ GIỮ LẠI CLASS ID
-    $redirect_url = 'create_test.php';
-    if ($url_class_id) {
-        $redirect_url .= '?class_id=' . $url_class_id;
-    }
+    $redirect_url = 'create_test.php?class_id=' . $url_class_id;
 
     if (isset($_FILES['word_file']) && $_FILES['word_file']['error'] === UPLOAD_ERR_OK) {
-        $uploadedFile = $_FILES['word_file'];
-        $fileExtension = strtolower(pathinfo($uploadedFile['name'], PATHINFO_EXTENSION));
-
-        if ($fileExtension !== 'docx') {
-            $current_error = "Chỉ chấp nhận file .docx";
+        $fileExt = strtolower(pathinfo($_FILES['word_file']['name'], PATHINFO_EXTENSION));
+        if ($fileExt !== 'docx') {
+            $_SESSION['import_error_message'] = "Chỉ chấp nhận file .docx";
         } else {
             try {
-                $test_data = parseWordFile($uploadedFile['tmp_name'], $debug_log);
-                
+                $test_data = parseWordFile($_FILES['word_file']['tmp_name'], $debug_log);
                 if (empty($test_data['questions'])) {
-                    $current_error = "Không tìm thấy câu hỏi hợp lệ. Vui lòng kiểm tra định dạng Word.";
+                    $_SESSION['import_error_message'] = "Không tìm thấy câu hỏi hợp lệ.";
                 } else {
-                    $current_success = "Đọc thành công " . count($test_data['questions']) . " câu hỏi.";
-                    $json_encoded = json_encode($test_data, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT);
-                    
-                    if ($json_encoded === false) {
-                        $current_error = "Lỗi mã hóa JSON.";
-                    } else {
-                        $_SESSION['imported_test_json'] = $json_encoded;
-                        $_SESSION['import_success_message'] = $current_success;
-                        $_SESSION['debug_log'] = $debug_log;
-                    }
+                    $_SESSION['import_success_message'] = "Đọc thành công " . count($test_data['questions']) . " câu hỏi.";
+                    $_SESSION['imported_test_json'] = json_encode($test_data, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT);
                 }
             } catch (Exception $e) {
-                $current_error = "Lỗi đọc file: " . $e->getMessage();
+                $_SESSION['import_error_message'] = "Lỗi đọc file: " . $e->getMessage();
             }
         }
-    } else {
-        $current_error = "Chưa chọn file hoặc lỗi upload.";
     }
-
-    if (!empty($current_error)) {
-        $_SESSION['import_error_message'] = $current_error;
-        $_SESSION['debug_log'] = $debug_log;
-    }
-
-    // *** QUAN TRỌNG: Redirect về URL có kèm class_id ***
     header('Location: ' . $redirect_url);
     exit();
 }
 
-// --- XỬ LÝ LƯU THỦ CÔNG ---
+// --- XỬ LÝ LƯU THỦ CÔNG (ĐÃ CẬP NHẬT ĐỂ LƯU ĐIỂM SỐ) ---
 elseif ($is_manual_save_request) {
     $title = $_POST['title'] ?? '';
     $duration = $_POST['duration'] ?? 0;
+    $max_score = $_POST['max_score'] ?? 10; // Lấy thang điểm
     $questions = $_POST['questions'] ?? [];
     $teacher_id = $_SESSION['user_id'];
-    
-    // Lấy class_id từ POST
     $form_class_id = !empty($_POST['class_id']) ? intval($_POST['class_id']) : null;
 
     if (empty($form_class_id)) {
         $error_message = "Lỗi: Không xác định được lớp học.";
-    } elseif (empty($title) || empty($questions) || !is_numeric($duration) || $duration <= 0) {
-        $error_message = "Vui lòng nhập đầy đủ thông tin tiêu đề, thời gian và câu hỏi.";
+    } elseif (empty($title) || empty($questions) || $duration <= 0) {
+        $error_message = "Vui lòng nhập đầy đủ thông tin.";
     } else {
         $invite_code = substr(str_shuffle("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"), 0, 6);
         $pdo->beginTransaction();
         
         try {
-            // Insert bài thi
-            $stmt = $pdo->prepare("INSERT INTO tests (teacher_id, class_id, title, invite_code, status, duration_minutes) VALUES (?, ?, ?, ?, 'draft', ?)");
-            $stmt->execute([$teacher_id, $form_class_id, $title, $invite_code, $duration]);
+            // INSERT BÀI THI KÈM THANG ĐIỂM (max_score)
+            $stmt = $pdo->prepare("INSERT INTO tests (teacher_id, class_id, title, invite_code, status, duration_minutes, max_score) VALUES (?, ?, ?, ?, 'draft', ?, ?)");
+            $stmt->execute([$teacher_id, $form_class_id, $title, $invite_code, $duration, $max_score]);
             $test_id = $pdo->lastInsertId();
 
             foreach ($questions as $q_key => $question) {
@@ -342,27 +259,26 @@ elseif ($is_manual_save_request) {
 
                 $question_text = trim($question['text']);
                 $question_type = $question['type'] ?? 'single_choice';
+                $points = isset($question['points']) ? floatval($question['points']) : 1; // Lấy điểm từng câu
+                
+                // Xử lý Audio (Giữ nguyên)
                 $audio_path = null;
-
-                // Xử lý Audio
                 if ($question_type === 'listening') {
                     if (isset($_FILES['questions']['name'][$q_key]['audio']) && $_FILES['questions']['error'][$q_key]['audio'] === UPLOAD_ERR_OK) {
-                         $audioTmpName = $_FILES['questions']['tmp_name'][$q_key]['audio'];
-                         $audioOriginalName = $_FILES['questions']['name'][$q_key]['audio'];
-                         $fileExtension = strtolower(pathinfo($audioOriginalName, PATHINFO_EXTENSION));
-                         $audioFileName = 'audio_' . $test_id . '_' . $q_key . '_' . uniqid() . '.' . $fileExtension;
-                         $audioUploadDir = ROOT_PATH . '/uploads/audio/';
-                         if (!is_dir($audioUploadDir)) mkdir($audioUploadDir, 0777, true);
-                         if (move_uploaded_file($audioTmpName, $audioUploadDir . $audioFileName)) {
-                             $audio_path = '/uploads/audio/' . $audioFileName;
+                         $audioName = 'audio_' . $test_id . '_' . $q_key . '_' . uniqid() . '.' . pathinfo($_FILES['questions']['name'][$q_key]['audio'], PATHINFO_EXTENSION);
+                         $uploadDir = ROOT_PATH . '/uploads/audio/';
+                         if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
+                         if (move_uploaded_file($_FILES['questions']['tmp_name'][$q_key]['audio'], $uploadDir . $audioName)) {
+                             $audio_path = '/uploads/audio/' . $audioName;
                          }
                     } elseif (!empty($question['existing_audio'])) {
                         $audio_path = $question['existing_audio'];
                     }
                 }
 
-                $stmt = $pdo->prepare("INSERT INTO questions (test_id, question_text, question_type, audio_path) VALUES (?, ?, ?, ?)");
-                $stmt->execute([$test_id, $question_text, $question_type, $audio_path]);
+                // INSERT CÂU HỎI KÈM ĐIỂM SỐ (points)
+                $stmt = $pdo->prepare("INSERT INTO questions (test_id, question_text, question_type, audio_path, points) VALUES (?, ?, ?, ?, ?)");
+                $stmt->execute([$test_id, $question_text, $question_type, $audio_path, $points]);
                 $question_id = $pdo->lastInsertId();
 
                 $correct_answers = $question['correct'] ?? [];
@@ -370,17 +286,15 @@ elseif ($is_manual_save_request) {
                 $correct_answers = array_map('strval', $correct_answers);
 
                 foreach ($question['answers'] as $a_key => $answer_text) {
-                    $trimmed_answer = trim((string)$answer_text);
-                    if (empty($trimmed_answer)) continue;
-                    
+                    $trimmed = trim((string)$answer_text);
+                    if (empty($trimmed)) continue;
                     $is_correct = in_array((string)$a_key, $correct_answers, true) ? 1 : 0;
                     $stmt = $pdo->prepare("INSERT INTO answers (question_id, answer_text, is_correct) VALUES (?, ?, ?)");
-                    $stmt->execute([$question_id, $trimmed_answer, $is_correct]);
+                    $stmt->execute([$question_id, $trimmed, $is_correct]);
                 }
             }
             
             $pdo->commit();
-            // Thành công -> Quay về trang xem lớp
             header("Location: view_class.php?id=" . $form_class_id);
             exit();
 
@@ -396,7 +310,6 @@ elseif ($is_manual_save_request) {
 <head>
     <meta charset="UTF-8">
     <title>Tạo bài kiểm tra - Lớp #<?php echo $url_class_id; ?></title>
-    <!-- Tailwind & Fonts -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -416,12 +329,11 @@ elseif ($is_manual_save_request) {
                     <i class="fa-solid fa-arrow-left"></i> Quay lại Lớp học
                 </a>
                 <h1 class="text-2xl font-bold text-slate-800">Tạo bài kiểm tra mới</h1>
-                <p class="text-sm text-slate-500">Đang tạo cho lớp ID: <span class="font-mono font-bold text-indigo-600"><?php echo $url_class_id; ?></span></p>
             </div>
         </div>
 
         <div class="p-6 md:p-8">
-            <!-- Thông báo lỗi/thành công -->
+            <!-- Thông báo -->
             <?php if ($error_message): ?>
                 <div class="bg-red-50 text-red-700 border border-red-200 rounded-lg p-4 mb-6 flex items-center">
                     <i class="fa-solid fa-circle-exclamation mr-3 text-xl"></i> <?php echo $error_message; ?>
@@ -434,53 +346,41 @@ elseif ($is_manual_save_request) {
                 </div>
             <?php endif; ?>
 
-            <!-- Debug Log -->
-            <?php if (!empty($debug_log)): ?>
-            <div class="bg-slate-900 text-green-400 rounded-lg p-4 mb-6 text-xs font-mono max-h-60 overflow-y-auto">
-                <div class="flex justify-between items-center mb-2 border-b border-slate-700 pb-2">
-                    <span class="font-bold">SYSTEM LOG</span>
-                    <button onclick="this.parentElement.parentElement.remove()" class="text-red-400 hover:text-red-300">Close [x]</button>
-                </div>
-                <?php foreach ($debug_log as $log): ?>
-                    <div class="mb-1">> <?php echo htmlspecialchars($log); ?></div>
-                <?php endforeach; ?>
-            </div>
-            <?php endif; ?>
-
             <!-- Upload Section -->
             <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-6 mb-8">
                 <h2 class="text-lg font-bold text-indigo-800 mb-2"><i class="fa-solid fa-file-word mr-2"></i>Nhập từ Word (.docx)</h2>
-                <p class="text-sm text-indigo-600 mb-4">Hỗ trợ tự động nhận diện câu hỏi, đáp án đúng (đánh dấu *) và file nghe.</p>
-                
                 <form method="POST" enctype="multipart/form-data" action="create_test.php?class_id=<?php echo $url_class_id; ?>" class="flex gap-3 items-end">
                     <div class="flex-1">
                         <input type="file" name="word_file" accept=".docx" required class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 transition-all cursor-pointer">
                     </div>
                     <button type="submit" name="submit_word_file" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors font-medium shadow-sm shadow-indigo-200">
-                        <i class="fa-solid fa-upload mr-1"></i> Tải lên & Phân tích
+                        <i class="fa-solid fa-upload mr-1"></i> Tải lên
                     </button>
                 </form>
             </div>
 
             <div class="flex items-center gap-4 mb-8">
                 <div class="h-px bg-gray-200 flex-1"></div>
-                <span class="text-gray-400 text-sm font-medium uppercase">Hoặc nhập thủ công</span>
+                <span class="text-gray-400 text-sm font-medium uppercase">Thiết lập bài thi</span>
                 <div class="h-px bg-gray-200 flex-1"></div>
             </div>
 
             <!-- Manual Form -->
             <form id="create-test-form" method="POST" enctype="multipart/form-data" action="create_test.php?class_id=<?php echo $url_class_id; ?>">
-                <!-- QUAN TRỌNG: Input ẩn chứa Class ID -->
                 <input type="hidden" name="class_id" value="<?php echo $url_class_id; ?>">
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                     <div class="md:col-span-2">
                         <label class="block text-sm font-medium text-slate-700 mb-1">Tên bài kiểm tra <span class="text-red-500">*</span></label>
-                        <input type="text" id="title" name="title" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" placeholder="Ví dụ: Kiểm tra 15 phút chương 1">
+                        <input type="text" id="title" name="title" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Ví dụ: Kiểm tra 15 phút">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Thời gian (phút) <span class="text-red-500">*</span></label>
                         <input type="number" id="duration" name="duration" min="1" value="45" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Thang điểm <span class="text-red-500">*</span></label>
+                        <input type="number" id="max_score" name="max_score" min="1" value="10" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-indigo-700" title="Tổng điểm tối đa của bài thi (VD: 10, 100)">
                     </div>
                 </div>
 
@@ -498,12 +398,10 @@ elseif ($is_manual_save_request) {
         </div>
     </div>
 
-    <!-- Hidden Data Holder for Import -->
+    <!-- Hidden Data Holder -->
     <div id="imported-data-holder" class="hidden" data-json="<?php echo ($imported_data_json_for_js !== 'null') ? htmlspecialchars($imported_data_json_for_js, ENT_QUOTES, 'UTF-8') : 'null'; ?>"></div>
 
-    <!-- Javascript xử lý thêm câu hỏi (Đã được làm đẹp code) -->
     <script>
-        // ... (Phần JS giữ nguyên logic nhưng cập nhật class CSS cho đẹp)
         let importedData = null;
         try {
             const dataHolder = document.getElementById('imported-data-holder');
@@ -518,6 +416,7 @@ elseif ($is_manual_save_request) {
             const addQuestionBtn = document.getElementById('add-question');
             const titleInput = document.getElementById('title');
             const durationInput = document.getElementById('duration');
+            const maxScoreInput = document.getElementById('max_score'); // Input thang điểm
             let questionIndex = 0;
 
             function addQuestion(questionData = null) {
@@ -529,10 +428,17 @@ elseif ($is_manual_save_request) {
                 const questionText = questionData?.text ?? '';
                 const questionType = questionData?.type ?? 'single_choice';
                 const audioRequired = questionData?.audio_required ?? false;
+                const points = questionData?.points ?? 1; // Điểm của câu hỏi
 
                 questionBlock.innerHTML = `
-                    <div class="flex justify-between items-start mb-3">
-                        <span class="bg-slate-100 text-slate-600 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">Câu hỏi <span class="q-number">${qIndex + 1}</span></span>
+                    <div class="flex justify-between items-start mb-3 border-b border-gray-100 pb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="bg-slate-800 text-white text-xs font-bold px-2 py-1 rounded uppercase">Câu ${qIndex + 1}</span>
+                            <div class="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded border border-yellow-200">
+                                <label class="text-xs font-semibold text-yellow-700">Điểm:</label>
+                                <input type="number" name="questions[${qIndex}][points]" value="${points}" step="0.1" min="0" class="w-12 text-xs font-bold text-center bg-transparent outline-none border-b border-yellow-400 focus:border-yellow-600">
+                            </div>
+                        </div>
                         <button type="button" class="remove-question text-gray-400 hover:text-red-500 transition-colors"><i class="fa-solid fa-trash"></i></button>
                     </div>
                     <div class="mb-4">
@@ -566,7 +472,6 @@ elseif ($is_manual_save_request) {
                 const answersContainer = questionBlock.querySelector('.answers-container');
                 const typeSelect = questionBlock.querySelector('.question-type-select');
 
-                // Add answers logic (same as before)
                 if (questionData?.answers && Object.keys(questionData.answers).length > 0) {
                     const correctAnswers = (Array.isArray(questionData.correct) ? questionData.correct : [questionData.correct]).filter(c => c != null).map(String);
                     Object.entries(questionData.answers).forEach(([ansKey, ansText]) => {
@@ -604,7 +509,7 @@ elseif ($is_manual_save_request) {
                 container.appendChild(answerOption);
             }
 
-            // Event delegation for dynamic elements
+            // Event Delegation
             questionsContainer.addEventListener('click', function(e) {
                 const target = e.target.closest('button');
                 if (!target) return;
@@ -620,10 +525,12 @@ elseif ($is_manual_save_request) {
                     }
                 } else if (target.classList.contains('remove-answer')) {
                     const row = target.closest('.answer-option');
-                    const container = row.parentElement;
-                    if (container.children.length > 2) {
+                    if (row.parentElement.children.length > 2) {
                         row.remove();
-                        updateAnswerPlaceholders(container);
+                        // Re-index placeholder A, B, C...
+                        const container = row.parentElement; 
+                        container.querySelectorAll('input[type="text"]').forEach((inp, i) => inp.placeholder = `Đáp án ${String.fromCharCode(65+i)}`);
+                        container.querySelectorAll('.correct-check').forEach((inp, i) => inp.value = i);
                     } else {
                         alert('Cần tối thiểu 2 đáp án.');
                     }
@@ -644,31 +551,24 @@ elseif ($is_manual_save_request) {
                 
                 inputs.forEach(input => {
                     input.type = newInputType;
-                    // Reset selection when switching types to avoid confusion
                     input.checked = false; 
                 });
             }
 
             function updateQuestionNumbers() {
                 questionsContainer.querySelectorAll('.question-block').forEach((block, idx) => {
-                    block.querySelector('.q-number').textContent = idx + 1;
-                    // Logic update name attributes phức tạp hơn, để đơn giản ta chỉ update số hiển thị
-                    // Trong thực tế cần update name="questions[NEW_INDEX]..."
-                });
-            }
-            
-            function updateAnswerPlaceholders(container) {
-                container.querySelectorAll('.answer-option input[type="text"]').forEach((input, idx) => {
-                    input.placeholder = `Đáp án ${String.fromCharCode(65 + idx)}`;
-                });
-                container.querySelectorAll('.correct-check').forEach((input, idx) => {
-                    input.value = idx;
+                    block.querySelector('span.bg-slate-800').textContent = 'Câu ' + (idx + 1);
                 });
             }
 
+            // Bind Add Button
+            addQuestionBtn.addEventListener('click', () => addQuestion());
+
+            // Load Data
             if (importedData) {
                 titleInput.value = importedData.title || '';
                 durationInput.value = importedData.duration || 45;
+                maxScoreInput.value = importedData.max_score || 10; // Load thang điểm nếu có
                 questionsContainer.innerHTML = '';
                 if(importedData.questions) importedData.questions.forEach(q => addQuestion(q));
             } else {

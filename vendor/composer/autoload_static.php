@@ -12,6 +12,7 @@ class ComposerStaticInitec98b9829b88b06ba97393bcb5de025d
         '37a3dc5111fe8f707ab4c132ef1dbc62' => __DIR__ . '/..' . '/guzzlehttp/guzzle/src/functions_include.php',
         '1f87db08236948d07391152dccb70f04' => __DIR__ . '/..' . '/google/apiclient-services/autoload.php',
         'decc78cc4436b1292c6c0d151b19445c' => __DIR__ . '/..' . '/phpseclib/phpseclib/phpseclib/bootstrap.php',
+        '0e6d7bf4a5811bfa5cf40c5ccd6fae6a' => __DIR__ . '/..' . '/symfony/polyfill-mbstring/bootstrap.php',
         'a8d3953fd9959404dd22d3dfcd0a79f0' => __DIR__ . '/..' . '/google/apiclient/src/aliases.php',
     );
 
@@ -23,6 +24,10 @@ class ComposerStaticInitec98b9829b88b06ba97393bcb5de025d
         'Z' => 
         array (
             'ZipStream\\' => 10,
+        ),
+        'S' => 
+        array (
+            'Symfony\\Polyfill\\Mbstring\\' => 26,
         ),
         'P' => 
         array (
@@ -69,6 +74,10 @@ class ComposerStaticInitec98b9829b88b06ba97393bcb5de025d
         'ZipStream\\' => 
         array (
             0 => __DIR__ . '/..' . '/maennchen/zipstream-php/src',
+        ),
+        'Symfony\\Polyfill\\Mbstring\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/polyfill-mbstring',
         ),
         'Psr\\SimpleCache\\' => 
         array (
@@ -153,6 +162,16 @@ class ComposerStaticInitec98b9829b88b06ba97393bcb5de025d
         ),
     );
 
+    public static $prefixesPsr0 = array (
+        'S' => 
+        array (
+            'Smalot\\PdfParser\\' => 
+            array (
+                0 => __DIR__ . '/..' . '/smalot/pdfparser/src',
+            ),
+        ),
+    );
+
     public static $classMap = array (
         'Composer\\InstalledVersions' => __DIR__ . '/..' . '/composer/InstalledVersions.php',
         'Google_AccessToken_Revoke' => __DIR__ . '/..' . '/google/apiclient/src/aliases.php',
@@ -182,6 +201,7 @@ class ComposerStaticInitec98b9829b88b06ba97393bcb5de025d
         return \Closure::bind(function () use ($loader) {
             $loader->prefixLengthsPsr4 = ComposerStaticInitec98b9829b88b06ba97393bcb5de025d::$prefixLengthsPsr4;
             $loader->prefixDirsPsr4 = ComposerStaticInitec98b9829b88b06ba97393bcb5de025d::$prefixDirsPsr4;
+            $loader->prefixesPsr0 = ComposerStaticInitec98b9829b88b06ba97393bcb5de025d::$prefixesPsr0;
             $loader->classMap = ComposerStaticInitec98b9829b88b06ba97393bcb5de025d::$classMap;
 
         }, null, ClassLoader::class);
