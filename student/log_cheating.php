@@ -1,44 +1,39 @@
 <?php
-// Tăng cường báo cáo lỗi để gỡ rối
-ini_set('display_errors', 0); // Không hiển thị lỗi cho người dùng cuối
-ini_set('log_errors', 1); // Bật ghi lỗi vào file
+// Tăng cường báo cáo lỗi nhưng không hiện ra màn hình (tránh hỏng JSON)
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 error_reporting(E_ALL);
+header('Content-Type: application/json');
 
-// === SỬA LỖI: Di chuyển require_once vào BÊN TRONG try-catch ===
 try {
-    // Sử dụng đường dẫn tuyệt đối, đáng tin cậy hơn để gọi config.php
-    require_once dirname(__DIR__) . '/config.php';
+    // 1. Kết nối CSDL
+    require_once '../config.php';
     
-    // === BƯỚC GỠ LỖI MỚI ===
     if (!isset($pdo) || !$pdo instanceof PDO) {
-        // Nếu $pdo không tồn tại, có nghĩa là file config.php
-        // bị lỗi cú pháp hoặc kết nối CSDL thất bại.
-        throw new Exception("Không thể khởi tạo kết nối CSDL. Vui lòng kiểm tra file config.php.");
+        throw new Exception("Không thể khởi tạo kết nối CSDL. Kiểm tra config.php.");
     }
-    // ==========================
 
-    // Endpoint này chỉ chấp nhận phương thức POST
+    // 2. Kiểm tra Request Method
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        http_response_code(405); // Method Not Allowed
-        echo json_encode(['status' => 'error', 'message' => 'Yêu cầu không hợp lệ.']);
-        exit();
+        http_response_code(405);
+        throw new Exception('Yêu cầu không hợp lệ (Method Not Allowed).');
     }
 
-    // Kiểm tra các dữ liệu cần thiết
-    if (!isset($_POST['attempt_id']) || !isset($_POST['violation_type']) || !isset($_POST['details'])) {
-        http_response_code(400); // Bad Request
-        echo json_encode(['status' => 'error', 'message' => 'Thiếu dữ liệu cần thiết.']);
-        exit();
+    // 3. Lấy dữ liệu đầu vào (Hỗ trợ cả tên biến cũ và mới)
+    $attempt_id = $_POST['attempt_id'] ?? null;
+    // Ưu tiên log_type, nếu không có thì lấy violation_type (fallback)
+    $log_type = $_POST['log_type'] ?? $_POST['violation_type'] ?? null;
+    $details = $_POST['details'] ?? '';
+    
+    if (!$attempt_id || !$log_type) {
+        http_response_code(400);
+        throw new Exception('Thiếu dữ liệu cần thiết (attempt_id hoặc log_type).');
     }
 
-    $log_type = $_POST['violation_type'];
-    $attempt_id = $_POST['attempt_id'];
-    $details = $_POST['details'];
     $proof_image_path = null;
 
-    // Xử lý ảnh chụp nếu có
+    // 4. Xử lý ảnh chụp bằng chứng (Screenshot)
     if (isset($_POST['screenshot']) && !empty($_POST['screenshot'])) {
-        // Khối try-catch này vẫn giữ nguyên để xử lý lỗi ảnh cụ thể
         try {
             $img_data = $_POST['screenshot'];
             if (strpos($img_data, 'data:image/jpeg;base64,') === 0) {
@@ -50,8 +45,10 @@ try {
                     throw new Exception("Dữ liệu base64 không hợp lệ.");
                 }
 
+                // Tạo tên file duy nhất
                 $filename = 'proof_' . $attempt_id . '_' . time() . '_' . uniqid() . '.jpg';
-                $upload_dir = ROOT_PATH . '/uploads/';
+                // Sử dụng __DIR__ để định vị đường dẫn chính xác hơn
+                $upload_dir = dirname(__DIR__) . '/uploads/';
 
                 if (!is_dir($upload_dir)) {
                     if (!mkdir($upload_dir, 0777, true)) {
@@ -64,26 +61,24 @@ try {
                 if (file_put_contents($file_path, $img_data_decoded)) {
                     $proof_image_path = '/uploads/' . $filename;
                 } else {
-                    throw new Exception("Không thể ghi file ảnh vào thư mục uploads.");
+                    throw new Exception("Không thể ghi file ảnh.");
                 }
             }
         } catch (Exception $e) {
-            // Nếu có lỗi ảnh, ghi log và thoát
-            http_response_code(500);
+            // Ghi log lỗi ảnh nhưng không dừng quy trình (vẫn lưu log vi phạm)
             error_log("Lỗi xử lý ảnh: " . $e->getMessage());
-            echo json_encode(['status' => 'error', 'message' => 'Lỗi máy chủ khi xử lý ảnh.']);
-            
         }
     }
 
-    // Lưu log vào cơ sở dữ liệu
+    // 5. Ghi log vi phạm vào CSDL
     $stmt = $pdo->prepare(
-        "INSERT INTO cheating_logs (attempt_id, log_type, details, proof_image) VALUES (?, ?, ?, ?)"
+        "INSERT INTO cheating_logs (attempt_id, log_type, details, proof_image, timestamp) VALUES (?, ?, ?, ?, NOW())"
     );
     $stmt->execute([$attempt_id, $log_type, $details, $proof_image_path]);
 
-    // --- 3. LOGIC TỰ ĐỘNG ĐÌNH CHỈ (AUTO BAN) ---
-    // Lấy cấu hình phạt của bài thi này
+
+    // 6. LOGIC TỰ ĐỘNG ĐÌNH CHỈ (AUTO BAN)
+    // Lấy quy tắc phạt từ bảng tests thông qua attempt_id
     $stmt = $pdo->prepare("
         SELECT t.suspension_rules 
         FROM test_attempts ta 
@@ -99,34 +94,38 @@ try {
     if ($rules_json) {
         $rules = json_decode($rules_json, true);
         
-        // Kiểm tra xem lỗi hiện tại có nằm trong quy tắc phạt không
+        // Kiểm tra xem loại lỗi này có nằm trong danh sách phạt không và giới hạn > 0
         if (isset($rules[$log_type]) && intval($rules[$log_type]) > 0) {
             $limit = intval($rules[$log_type]);
             
-            // Đếm tổng số lần vi phạm lỗi này của thí sinh
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM cheating_logs WHERE attempt_id = ? AND log_type = ?");
-            $stmt->execute([$attempt_id, $log_type]);
-            $current_count = $stmt->fetchColumn();
+            // Đếm tổng số lần vi phạm lỗi này của thí sinh hiện tại
+            $countStmt = $pdo->prepare("SELECT COUNT(*) FROM cheating_logs WHERE attempt_id = ? AND log_type = ?");
+            $countStmt->execute([$attempt_id, $log_type]);
+            $current_count = $countStmt->fetchColumn();
 
-            // Nếu vượt quá giới hạn -> ĐÌNH CHỈ
+            // Nếu số lần vi phạm >= giới hạn cho phép -> ĐÌNH CHỈ
             if ($current_count >= $limit) {
                 $is_suspended = true;
                 $suspend_reason = "Hệ thống tự động đình chỉ: Vi phạm lỗi '$log_type' quá $limit lần.";
                 
                 // Cập nhật trạng thái bài thi: suspended, điểm = 0, kết thúc ngay lập tức
-                $stmt = $pdo->prepare("
+                $updateStmt = $pdo->prepare("
                     UPDATE test_attempts 
                     SET status = 'suspended', score = 0, end_time = NOW() 
                     WHERE id = ?
                 ");
-                $stmt->execute([$attempt_id]);
+                $updateStmt->execute([$attempt_id]);
+
+                // Gửi tin nhắn hệ thống vào khung chat để lưu vết
+                $msgStmt = $pdo->prepare("INSERT INTO exam_messages (attempt_id, sender_type, message) VALUES (?, 'system', ?)");
+                $msgStmt->execute([$attempt_id, $suspend_reason]);
             }
         }
     }
 
+    // 7. Trả về kết quả
     http_response_code(200);
     
-    // Trả về kết quả, nếu bị đình chỉ thì frontend sẽ xử lý redirect
     if ($is_suspended) {
         echo json_encode([
             'status' => 'suspended', 
@@ -140,8 +139,10 @@ try {
     }
 
 } catch (Throwable $t) {
+    // Bắt tất cả lỗi (Exception và Error)
     http_response_code(500);
     error_log("Lỗi nghiêm trọng trong log_cheating.php: " . $t->getMessage());
+    
     echo json_encode([
         'status' => 'error', 
         'message' => 'Lỗi máy chủ nghiêm trọng.',
@@ -149,4 +150,4 @@ try {
     ]);
     exit();
 }
-
+?>

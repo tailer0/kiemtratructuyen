@@ -68,7 +68,19 @@ $attempt = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$attempt) {
     die("Lần làm bài không tồn tại.");
 }
-
+// KIỂM TRA TRẠNG THÁI ĐÌNH CHỈ NGAY KHI LOAD TRANG
+if ($attempt['status'] === 'suspended') {
+    die("
+        <div style='font-family: sans-serif; text-align: center; margin-top: 50px; color: #b91c1c;'>
+            <h1 style='font-size: 4rem; margin-bottom:0;'>⛔</h1>
+            <h2 style='font-size: 2rem;'>BẠN ĐÃ BỊ ĐÌNH CHỈ THI!</h2>
+            <p>Hệ thống ghi nhận vi phạm quy chế thi quá số lần cho phép.</p>
+            <p><b>Điểm bài thi: 0</b></p>
+            <br>
+            <a href='index.php' style='text-decoration: none; background: #333; color: white; padding: 10px 20px; border-radius: 5px;'>Về trang chủ</a>
+        </div>
+    ");
+}
 // Kiểm tra xem bài thi đã nộp chưa
 if ($attempt['end_time'] !== null) {
     die("Bạn đã hoàn thành bài kiểm tra này rồi. <a href='/student/index.php'>Quay về trang chủ</a>");
@@ -277,6 +289,34 @@ $answers_stmt = $pdo->prepare("SELECT * FROM answers WHERE question_id = ? ORDER
 
     <!-- [MỚI] Script bổ sung: Đồng bộ & Realtime Polling -->
     <script>
+        function checkExamStatus() {
+            fetch(`check_status.php?attempt_id=${ATTEMPT_ID}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // 1. Kiểm tra bị đình chỉ
+                        if (data.exam_status === 'suspended') {
+                            // Xóa nội dung trang để chặn thao tác
+                            document.body.innerHTML = '';
+                            document.body.style.background = '#450a0a';
+                            
+                            // Hiển thị thông báo và chuyển trang
+                            alert("⛔ BẠN ĐÃ BỊ ĐÌNH CHỈ THI!\n\nLý do: Vi phạm quy chế thi quá nhiều lần.\nĐiểm bài thi: 0\n\nHệ thống sẽ đưa bạn về trang chủ.");
+                            window.location.href = 'index.php';
+                            return;
+                        }
+                        // 2. Kiểm tra đã nộp bài (do hết giờ hoặc GV thu bài)
+                        if (data.is_finished) {
+                            window.location.href = 'result.php?attempt_id=' + ATTEMPT_ID;
+                        }
+                    }
+                })
+                .catch(e => console.error("Status check failed:", e));
+        }
+        
+        // Chạy kiểm tra mỗi 3 giây
+        setInterval(checkExamStatus, 3000);
+
         // 1. Logic Đồng hồ đếm ngược & Nút Bắt đầu (Cập nhật lại để đồng bộ với overlay cũ)
         let timeLeft = DURATION;
         const timerEl = document.getElementById('timer');
@@ -366,6 +406,34 @@ $answers_stmt = $pdo->prepare("SELECT * FROM answers WHERE question_id = ? ORDER
     document.addEventListener('DOMContentLoaded', function() {
         startExamMonitor(currentAttemptId);
     });
+    // HÀM KIỂM TRA TRẠNG THÁI LIÊN TỤC
+    function checkSuspensionStatus() {
+            // Gọi đến file check_status.php mà tôi đã cung cấp trước đó
+            fetch(`check_status.php?attempt_id=${currentAttemptId}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Nếu phát hiện bị đình chỉ
+                        if (data.exam_status === 'suspended') {
+                            // Xóa giao diện làm bài
+                            document.body.innerHTML = `
+                                <div style="height:100vh; display:flex; align-items:center; justify-content:center; background-color:#450a0a; color:white; flex-direction:column; text-align:center;">
+                                    <h1 style="font-size:3rem; margin-bottom:1rem;">⛔ ĐÃ BỊ ĐÌNH CHỈ</h1>
+                                    <p style="font-size:1.2rem;">Bạn đã vi phạm quy chế thi quá số lần cho phép.</p>
+                                    <p style="font-size:1.2rem; font-weight:bold; margin-top:10px;">Điểm bài thi: 0</p>
+                                    <button onclick="window.location.href='index.php'" style="margin-top:20px; padding:10px 20px; border-radius:5px; background:white; color:#450a0a; font-weight:bold; cursor:pointer;">Về trang chủ</button>
+                                </div>
+                            `;
+                            // Dừng kiểm tra
+                            clearInterval(suspensionInterval);
+                        }
+                    }
+                })
+                .catch(err => console.log('Check status error (ignore if offline):', err));
+        }
+
+        // Chạy mỗi 3 giây
+        const suspensionInterval = setInterval(checkSuspensionStatus, 3000);
 </script>
 </body>
 </html>
