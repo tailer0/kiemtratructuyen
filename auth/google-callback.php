@@ -1,7 +1,6 @@
     <?php
     session_start();
     require_once '../config.php';
-    require_once ROOT_PATH . '/_partials/Header.php';
     if (isset($_GET['code'])) {
         $token = $gClient->fetchAccessTokenWithAuthCode($_GET['code']);
         if (!isset($token['error'])) {
