@@ -1,5 +1,8 @@
-// Enhanced AI Proctoring System - OPTIMIZED FOR FAST LOADING
-// Face detection only, object detection optional/lazy loaded
+// Enhanced AI Proctoring System - ALL IN ONE
+// Bao gồm: AI Detect + Chặn chuột/Phím/Tab + Popup Cảnh báo
+
+// --- BIẾN TOÀN CỤC ---
+window.isSubmitting = false;
 
 document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
@@ -15,534 +18,270 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // AI Models
     let faceMeshModel;
-    let cocoSsdModel = null; // Will be loaded lazily
+    let cocoSsdModel = null;
     let videoInterval, objectDetectionInterval;
-    let isSubmitting = false;
 
     // ============================================
-    // OPTIMIZED CONFIGURATION
+    // 1. CONFIGURATION
     // ============================================
-    
     const CONFIG = {
-        // Face Detection - Intelligent Calibration
         face: {
-            yawThreshold: 40,
-            pitchDownThreshold: 30,
-            pitchUpThreshold: 25,
-            minViolationDuration: 2500,
-            consecutiveFramesRequired: 5,
-            recoveryFrames: 3,
-            smoothingWindow: 5,
-            outlierThreshold: 2.5,
+            yawThreshold: 40, pitchDownThreshold: 30, pitchUpThreshold: 25,
+            minViolationDuration: 2500, // 2.5s mới bắt lỗi
+            detectionInterval: 500,
         },
-        
-        noFace: {
-            duration: 6000,
-            warningDuration: 3000,
-        },
-        
-        multipleFace: {
-            duration: 4000,
-            confidenceThreshold: 0.7,
-        },
-        
-        object: {
-            enabled: false, // Start with face detection only
-            phoneConfidence: 0.6,
-            phoneDuration: 2500,
-            scanInterval: 2000,
-            bookConfidence: 0.65,
-        },
-        
-        logCooldown: 10000,
-        detectionInterval: 500,
+        noFace: { duration: 6000, warningDuration: 3000 },
+        multipleFace: { duration: 4000 },
+        object: { enabled: false, scanInterval: 2000 },
+        logCooldown: 5000, // Giãn cách log lỗi (5s)
     };
 
     // ============================================
-    // TRACKING STATE
+    // 2. STATE MANAGEMENT
     // ============================================
-    
     const state = {
-        violations: {
-            looking_away: {
-                count: 0,
-                startTime: null,
-                frames: [],
-                active: false
-            },
-            head_down: {
-                count: 0,
-                startTime: null,
-                frames: [],
-                active: false
-            },
-            head_up: {
-                count: 0,
-                startTime: null,
-                frames: [],
-                active: false
-            }
-        },
-        
-        measurements: {
-            yaw: [],
-            pitch: [],
-            roll: []
-        },
-        
-        face: {
-            lastSeenTime: Date.now(),
-            normalFrames: 0,
-            isPresent: false,
-            count: 0
-        },
-        
-        noFaceStartTime: null,
-        multipleFaceStartTime: null,
-        phoneDetectionStartTime: null,
+        face: { lastSeen: Date.now(), startTime: null },
         lastLogTime: {},
-        
-        calibration: {
-            isCalibrated: false,
-            samples: [],
-            neutralYaw: 0,
-            neutralPitch: 0,
-            samplesNeeded: 30
-        }
+        calibration: { isCalibrated: false, samples: [], neutralYaw: 0, neutralPitch: 0 }
     };
 
     // ============================================
-    // SYSTEM MONITORING
+    // 3. SECURITY EVENTS (CHẶN MOUSE, KEY, TAB)
     // ============================================
-    
-    let timerInterval = null;
+    function setupSecurityListeners() {
+        console.log("🛡️ Đang kích hoạt lá chắn bảo mật...");
 
-    document.addEventListener('visibilitychange', () => {
-        if (document.hidden && timerInterval) {
-            logCheating('switched_tab', 'Người dùng đã chuyển tab khác', null);
-        }
-    });
+        // A. Chặn chuột phải
+        document.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            window.logCheating('right_click', 'Cố tình bấm chuột phải', null);
+        });
 
-    window.addEventListener('blur', () => {
-        if (timerInterval) {
-            logCheating('window_blur', 'Người dùng đã nhấp ra ngoài cửa sổ bài thi.', null);
-        }
-    });
-
-    ['copy', 'paste', 'cut'].forEach(event => {
-        document.addEventListener(event, (e) => {
-            if (timerInterval) {
+        // B. Chặn Copy/Paste/Cut
+        ['copy', 'paste', 'cut'].forEach(evt => {
+            document.addEventListener(evt, (e) => {
                 e.preventDefault();
-                logCheating('clipboard_attempt', `Cố gắng ${event} nội dung.`, null);
+                window.logCheating('copy_paste', `Thao tác ${evt}`, null);
+            });
+        });
+
+        // C. Phát hiện chuyển Tab / Thu nhỏ
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+                window.logCheating('switched_tab', 'Rời khỏi màn hình thi', null);
             }
         });
-    });
 
-    document.addEventListener('contextmenu', (e) => {
-        if (timerInterval) {
-            e.preventDefault();
-            logCheating('context_menu_attempt', 'Cố gắng mở menu chuột phải.', null);
-        }
-    });
+        // D. Phát hiện click ra ngoài (Mất focus)
+        window.addEventListener("blur", () => {
+            if (document.activeElement === document.body) {
+                window.logCheating('window_blur', 'Click ra ngoài khu vực thi', null);
+            }
+        });
 
-    document.addEventListener('keydown', (e) => {
-        if (!timerInterval) return;
-        if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i'))) {
-            e.preventDefault();
-            logCheating('devtools_key_attempt', 'Cố gắng mở Developer Tools.', null);
-        }
-        if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) {
-            e.preventDefault();
-            logCheating('print_attempt', 'Cố gắng in trang.', null);
-        }
-    });
-
-    document.addEventListener('fullscreenchange', () => {
-        if (!document.fullscreenElement && timerInterval) {
-            logCheating('fullscreen_exit', 'Thoát toàn màn hình.', null);
-        }
-    });
+        // E. Chặn phím cấm (F12, Ctrl+P, PrintScreen...)
+        document.addEventListener('keydown', function(e) {
+            if (
+                e.key === "F12" || 
+                (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "i" || e.key === "C" || e.key === "c")) ||
+                (e.ctrlKey && (e.key === "p" || e.key === "P" || e.key === "u" || e.key === "U"))
+            ) {
+                e.preventDefault();
+                window.logCheating('devtools_key_attempt', 'Sử dụng phím tắt cấm', null);
+            }
+        });
+    }
 
     // ============================================
-    // CAMERA & MODEL INITIALIZATION - OPTIMIZED
+    // 4. CAMERA & AI LOGIC
     // ============================================
-
     async function setupCamera() {
         try {
             statusBox.textContent = 'Đang khởi động camera...';
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { 
-                    width: { ideal: 640 },
-                    height: { ideal: 480 },
-                    frameRate: { ideal: 24 }
-                }, 
-                audio: false 
+                video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false 
             });
             webcamElement.srcObject = stream;
-            return new Promise((resolve) => {
-                webcamElement.onloadedmetadata = () => {
-                    console.log('✓ Camera ready');
-                    resolve(webcamElement);
-                };
-            });
+            return new Promise(resolve => webcamElement.onloadedmetadata = () => resolve(webcamElement));
         } catch (error) {
             statusBox.textContent = "Không thể truy cập camera";
-            console.error("Camera error:", error);
             return null;
         }
     }
 
     async function loadModels() {
-        statusBox.textContent = 'Đang tải AI Face Detection (10-20s)...';
-        
+        statusBox.textContent = 'Đang tải AI...';
         try {
-            // Only load Face Mesh initially - it's faster
-            console.log('Loading Face Mesh model...');
-            
-            const faceModelType = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-            const faceDetectorConfig = {
-                runtime: 'mediapipe',
-                solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh',
-                maxFaces: 3,
-                refineLandmarks: false, // Faster without refinement
-                minDetectionConfidence: 0.6,
-                minTrackingConfidence: 0.6
+            const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
+            const config = {
+                runtime: 'mediapipe', solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh',
+                maxFaces: 3, refineLandmarks: false
             };
+            faceMeshModel = await faceLandmarksDetection.createDetector(model, config);
             
-            faceMeshModel = await faceLandmarksDetection.createDetector(faceModelType, faceDetectorConfig);
-            console.log('Face Mesh loaded successfully');
+            // Load Object Detection ẩn (Lazy load)
+            (async () => {
+                try {
+                    if (typeof cocoSsd !== 'undefined') {
+                        cocoSsdModel = await cocoSsd.load();
+                        CONFIG.object.enabled = true;
+                    }
+                } catch(e) {}
+            })();
 
-            statusBox.textContent = 'AI sẵn sàng - Đang hiệu chuẩn...';
-            
-            // Load object detection in background (optional)
-            loadObjectDetectionLazy();
-            
+            statusBox.textContent = 'Hệ thống sẵn sàng';
             return true;
         } catch (error) {
-            statusBox.textContent = "Lỗi tải AI model";
-            console.error("Model load error:", error);
-            alert(`Lỗi tải AI model: ${error.message}\n\nVui lòng:\n1. Kiểm tra kết nối internet\n2. Tải lại trang (Ctrl+F5)\n3. Thử trình duyệt khác (Chrome/Edge)`);
+            statusBox.textContent = "Lỗi tải AI";
+            alert("Lỗi tải AI Model. Vui lòng tải lại trang.");
             return false;
         }
     }
 
-    // Load object detection in background (non-blocking)
-    async function loadObjectDetectionLazy() {
-        try {
-            console.log('Loading object detection in background...');
-            
-            // Check if cocoSsd is available
-            if (typeof cocoSsd === 'undefined') {
-                console.warn('COCO-SSD library not loaded, skipping object detection');
-                return;
-            }
-            
-            cocoSsdModel = await cocoSsd.load();
-            CONFIG.object.enabled = true;
-            console.log('Object Detection loaded (background)');
-            
-            // Start object detection if test has started
-            if (timerInterval && !objectDetectionInterval) {
-                objectDetectionInterval = setInterval(detectObjects, CONFIG.object.scanInterval);
-            }
-        } catch (error) {
-            console.warn('Object detection disabled:', error.message);
-            CONFIG.object.enabled = false;
-        }
-    }
-
-    // ============================================
-    // ADVANCED FACE ANALYSIS
-    // ============================================
-
-    function calibrateNeutralPosition(yaw, pitch) {
-        if (state.calibration.isCalibrated) return;
-
-        state.calibration.samples.push({ yaw, pitch });
-
-        if (state.calibration.samples.length >= state.calibration.samplesNeeded) {
-            const avgYaw = state.calibration.samples.reduce((sum, s) => sum + s.yaw, 0) / state.calibration.samples.length;
-            const avgPitch = state.calibration.samples.reduce((sum, s) => sum + s.pitch, 0) / state.calibration.samples.length;
-            
-            state.calibration.neutralYaw = avgYaw;
-            state.calibration.neutralPitch = avgPitch;
-            state.calibration.isCalibrated = true;
-            
-            console.log(`Hiệu chuẩn hoàn tất - Neutral: Yaw=${avgYaw.toFixed(2)}, Pitch=${avgPitch.toFixed(2)}`);
-            statusBox.textContent = 'Hệ thống giám sát đã sẵn sàng';
-        } else {
-            const progress = Math.round((state.calibration.samples.length / state.calibration.samplesNeeded) * 100);
-            statusBox.textContent = `Hiệu chuẩn... ${progress}%`;
-        }
-    }
-
-    function smoothMeasurement(type, value) {
-        const buffer = state.measurements[type];
-        buffer.push(value);
-        
-        if (buffer.length > CONFIG.face.smoothingWindow) {
-            buffer.shift();
-        }
-
-        const sorted = [...buffer].sort((a, b) => a - b);
-        const mid = Math.floor(sorted.length / 2);
-        return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-    }
-
-    function calculateHeadPose(keypoints) {
-        const leftEye = keypoints.find(p => p.name === 'leftEye');
-        const rightEye = keypoints.find(p => p.name === 'rightEye');
-        const nose = keypoints.find(p => p.name === 'noseTip');
-        const leftCheek = keypoints.find(p => p.index === 234);
-        const rightCheek = keypoints.find(p => p.index === 454);
-        const chin = keypoints.find(p => p.index === 152);
-        const forehead = keypoints.find(p => p.index === 10);
-
-        if (!leftEye || !rightEye || !nose || !leftCheek || !rightCheek) {
-            return null;
-        }
-
-        // Calculate YAW
-        const noseToLeftDist = Math.abs(nose.x - leftCheek.x);
-        const noseToRightDist = Math.abs(nose.x - rightCheek.x);
-        const rawYaw = Math.atan2(noseToLeftDist - noseToRightDist, noseToLeftDist + noseToRightDist) * (180 / Math.PI);
-        const yaw = smoothMeasurement('yaw', rawYaw);
-
-        // Calculate PITCH
-        const eyeMidY = (leftEye.y + rightEye.y) / 2;
-        const faceHeight = chin && forehead ? Math.abs(chin.y - forehead.y) : 100;
-        const rawPitch = ((nose.y - eyeMidY) / faceHeight) * 100;
-        const pitch = smoothMeasurement('pitch', rawPitch);
-
-        // Calculate ROLL
-        const eyeDeltaY = rightEye.y - leftEye.y;
-        const eyeDeltaX = rightEye.x - leftEye.x;
-        const rawRoll = Math.atan2(eyeDeltaY, eyeDeltaX) * (180 / Math.PI);
-        const roll = smoothMeasurement('roll', rawRoll);
-
-        return { yaw, pitch, roll };
-    }
-
-    function analyzeViolation(pose) {
-        if (!state.calibration.isCalibrated) {
-            calibrateNeutralPosition(pose.yaw, pose.pitch);
-            return null;
-        }
-
-        const yawDeviation = Math.abs(pose.yaw - state.calibration.neutralYaw);
-        const pitchDeviation = pose.pitch - state.calibration.neutralPitch;
-
-        let violation = null;
-
-        const YAW_RIGHT_THRESHOLD = 2.0;
-        const YAW_LEFT_THRESHOLD = 0.45;
-
-        if (yawDeviation > CONFIG.face.yawThreshold) {
-            violation = {
-                type: 'looking_away',
-                severity: yawDeviation > CONFIG.face.yawThreshold * 1.5 ? 'high' : 'medium',
-                details: `Quay đầu ${pose.yaw > state.calibration.neutralYaw ? 'phải' : 'trái'} (${yawDeviation.toFixed(1)}°)`,
-                value: yawDeviation
-            };
-        } else if (pitchDeviation > CONFIG.face.pitchDownThreshold) {
-            violation = {
-                type: 'head_down',
-                severity: pitchDeviation > CONFIG.face.pitchDownThreshold * 1.3 ? 'high' : 'medium',
-                details: `Cúi đầu xuống (${pitchDeviation.toFixed(1)}°)`,
-                value: pitchDeviation
-            };
-        } else if (pitchDeviation < -CONFIG.face.pitchUpThreshold) {
-            violation = {
-                type: 'head_up',
-                severity: pitchDeviation < -CONFIG.face.pitchUpThreshold * 1.3 ? 'high' : 'medium',
-                details: `Ngẩng đầu lên (${Math.abs(pitchDeviation).toFixed(1)}°)`,
-                value: Math.abs(pitchDeviation)
-            };
-        }
-
-        return violation;
-    }
-
-    function processViolation(violation) {
-        if (!violation) {
-            Object.keys(state.violations).forEach(key => {
-                const v = state.violations[key];
-                v.frames.push(false);
-                
-                if (v.frames.length > CONFIG.face.smoothingWindow) {
-                    v.frames.shift();
-                }
-                
-                const recentNormalCount = v.frames.slice(-CONFIG.face.recoveryFrames).filter(f => !f).length;
-                if (recentNormalCount === CONFIG.face.recoveryFrames) {
-                    v.active = false;
-                    v.count = 0;
-                    v.startTime = null;
-                }
-            });
-            
-            state.face.normalFrames++;
-            if (state.face.normalFrames > 10 && statusBox.textContent.includes('⚠️')) {
-                statusBox.textContent = 'Tư thế bình thường';
-            }
-            return;
-        }
-
-        state.face.normalFrames = 0;
-        const v = state.violations[violation.type];
-        v.frames.push(true);
-        
-        if (v.frames.length > CONFIG.face.smoothingWindow) {
-            v.frames.shift();
-        }
-
-        const recentViolationCount = v.frames.slice(-CONFIG.face.consecutiveFramesRequired).filter(f => f).length;
-        
-        if (!v.active && recentViolationCount === CONFIG.face.consecutiveFramesRequired) {
-            v.active = true;
-            v.startTime = Date.now();
-            v.count++;
-        }
-
-        if (v.active) {
-            const duration = Date.now() - v.startTime;
-            statusBox.textContent = `⚠️ ${violation.details} (${(duration/1000).toFixed(1)}s)`;
-            
-            if (duration > CONFIG.face.minViolationDuration && canLogViolation(violation.type)) {
-                const imageData = captureFrame();
-                logCheating(
-                    violation.type,
-                    `${violation.details} - Kéo dài ${(duration/1000).toFixed(1)}s (Mức độ: ${violation.severity})`,
-                    imageData
-                );
-            }
-        }
-    }
-
+    // --- AI: Face Logic ---
     async function detectFaces() {
         if (!faceMeshModel || !webcamElement || webcamElement.readyState < 2) return;
         
         try {
             const predictions = await faceMeshModel.estimateFaces(webcamElement, { flipHorizontal: false });
 
-            state.face.count = predictions.length;
-            state.face.isPresent = predictions.length > 0;
-
-            // No face
+            // 1. Không thấy mặt
             if (predictions.length === 0) {
-                if (!state.noFaceStartTime) {
-                    state.noFaceStartTime = Date.now();
-                }
+                if (!state.face.startTime) state.face.startTime = Date.now();
+                const duration = Date.now() - state.face.startTime;
                 
-                const duration = Date.now() - state.noFaceStartTime;
-                
-                if (duration > CONFIG.noFace.warningDuration) {
-                    statusBox.textContent = `Không tìm thấy khuôn mặt (${Math.floor(duration/1000)}s)`;
-                }
-                
-                if (duration > CONFIG.noFace.duration && canLogViolation('no_face_detected')) {
-                    const imageData = captureFrame();
-                    logCheating('no_face_detected', `Không tìm thấy khuôn mặt trong ${Math.floor(duration/1000)}s`, imageData);
+                if (duration > CONFIG.noFace.warningDuration) statusBox.textContent = "⚠️ Không tìm thấy khuôn mặt";
+                if (duration > CONFIG.noFace.duration && canLog('no_face_detected')) {
+                    window.logCheating('no_face_detected', `Mất mặt ${Math.round(duration/1000)}s`, captureFrame());
                 }
                 return;
             }
-            
-            state.noFaceStartTime = null;
+            state.face.startTime = null;
 
-            // Multiple faces
+            // 2. Nhiều người
             if (predictions.length > 1) {
-                if (!state.multipleFaceStartTime) {
-                    state.multipleFaceStartTime = Date.now();
-                }
-                
-                const duration = Date.now() - state.multipleFaceStartTime;
-                statusBox.textContent = `Phát hiện ${predictions.length} người (${Math.floor(duration/1000)}s)`;
-                
-                if (duration > CONFIG.multipleFace.duration && canLogViolation('multiple_faces')) {
-                    const imageData = captureFrame();
-                    logCheating('multiple_faces', `Phát hiện ${predictions.length} người trong ${Math.floor(duration/1000)}s`, imageData);
+                statusBox.textContent = `⚠️ Phát hiện ${predictions.length} người`;
+                if (canLog('multiple_faces')) {
+                    window.logCheating('multiple_faces', `Phát hiện ${predictions.length} người`, captureFrame());
                 }
                 return;
             }
-            
-            state.multipleFaceStartTime = null;
 
-            // Analyze pose
-            const face = predictions[0];
-            const pose = calculateHeadPose(face.keypoints);
-            
-            if (pose) {
-                const violation = analyzeViolation(pose);
-                processViolation(violation);
+            // 3. Hướng nhìn (Head Pose)
+            const keypoints = predictions[0].keypoints;
+            const pose = calculateHeadPose(keypoints);
+            if (pose) analyzePose(pose);
+
+        } catch (e) { console.error(e); }
+    }
+
+    // --- AI: Pose Calculation ---
+    function calculateHeadPose(kp) {
+        const nose = kp.find(p => p.name === 'noseTip');
+        const leftCheek = kp.find(p => p.index === 234);
+        const rightCheek = kp.find(p => p.index === 454);
+        if(!nose || !leftCheek || !rightCheek) return null;
+
+        const rangeX = Math.abs(leftCheek.x - rightCheek.x);
+        const midX = (leftCheek.x + rightCheek.x) / 2;
+        // Yaw: Độ lệch của mũi so với trung tâm 2 má
+        const yaw = ((nose.x - midX) / rangeX) * 100; // Giá trị tương đối
+        
+        const eyeLine = (kp.find(p=>p.name==='leftEye').y + kp.find(p=>p.name==='rightEye').y)/2;
+        const chin = kp.find(p=>p.index===152).y;
+        const faceH = Math.abs(chin - eyeLine);
+        // Pitch: Độ cao mũi
+        const pitch = ((nose.y - eyeLine) / faceH) * 100;
+
+        return { yaw, pitch };
+    }
+
+    function analyzePose(pose) {
+        // Auto Calibrate (Lấy mẫu vị trí ngồi ban đầu)
+        if (!state.calibration.isCalibrated) {
+            state.calibration.samples.push(pose);
+            if(state.calibration.samples.length > 20) {
+                const avgY = state.calibration.samples.reduce((a,b)=>a+b.yaw,0)/20;
+                const avgP = state.calibration.samples.reduce((a,b)=>a+b.pitch,0)/20;
+                state.calibration.neutralYaw = avgY;
+                state.calibration.neutralPitch = avgP;
+                state.calibration.isCalibrated = true;
+                statusBox.textContent = "✅ Đã hiệu chuẩn tư thế";
+            } else {
+                statusBox.textContent = `Đang hiệu chuẩn... ${state.calibration.samples.length * 5}%`;
             }
+            return;
+        }
 
-        } catch (error) {
-            console.error("Face detection error:", error);
+        const dy = pose.yaw - state.calibration.neutralYaw;
+        const dp = pose.pitch - state.calibration.neutralPitch;
+
+        let msg = '';
+        let type = '';
+
+        if (Math.abs(dy) > 25) { msg = "Quay mặt quá mức"; type = "looking_away"; }
+        else if (dp > 20) { msg = "Cúi đầu xuống"; type = "head_down"; }
+        else if (dp < -20) { msg = "Ngẩng đầu lên"; type = "head_up"; }
+
+        if (msg) {
+            statusBox.textContent = `⚠️ ${msg}`;
+            if (canLog(type)) window.logCheating(type, msg, captureFrame());
+        } else {
+            if (statusBox.textContent.includes('⚠️')) statusBox.textContent = "Tư thế bình thường";
         }
     }
 
-    // ============================================
-    // OBJECT DETECTION (Optional)
-    // ============================================
-
+    // --- AI: Object Logic ---
     async function detectObjects() {
-        if (!CONFIG.object.enabled || !cocoSsdModel || !webcamElement || webcamElement.readyState < 2) return;
-        
+        if (!CONFIG.object.enabled || !cocoSsdModel) return;
         try {
             const predictions = await cocoSsdModel.detect(webcamElement);
-            
-            const suspiciousObjects = predictions.filter(pred => {
-                const label = pred.class.toLowerCase();
-                return (
-                    (label.includes('phone') || label === 'cell phone') && pred.score > CONFIG.object.phoneConfidence ||
-                    label === 'book' && pred.score > CONFIG.object.bookConfidence ||
-                    label === 'laptop' && pred.score > 0.65
-                );
-            });
-
-            if (suspiciousObjects.length > 0) {
-                const phoneDetected = suspiciousObjects.some(obj => obj.class.toLowerCase().includes('phone'));
-
-                if (phoneDetected) {
-                    if (!state.phoneDetectionStartTime) {
-                        state.phoneDetectionStartTime = Date.now();
-                    }
-
-                    const duration = Date.now() - state.phoneDetectionStartTime;
-                    
-                    if (duration > CONFIG.object.phoneDuration) {
-                        statusBox.textContent = `Phát hiện sử dụng điện thoại!`;
-                        
-                        if (canLogViolation('phone_detected')) {
-                            const imageData = captureFrame();
-                            const details = suspiciousObjects.map(obj => 
-                                `${obj.class} (${(obj.score * 100).toFixed(0)}%)`
-                            ).join(', ');
-                            
-                            logCheating('phone_detected', `Vật dụng không được phép: ${details}`, imageData);
-                        }
-                    }
-                }
-            } else {
-                state.phoneDetectionStartTime = null;
+            const phone = predictions.find(p => p.class === 'cell phone' && p.score > 0.6);
+            if (phone) {
+                statusBox.textContent = "⚠️ Phát hiện điện thoại";
+                if(canLog('phone_detected')) window.logCheating('phone_detected', 'Sử dụng điện thoại', captureFrame());
             }
-
-        } catch (error) {
-            console.error("Object detection error:", error);
-        }
+        } catch(e){}
     }
 
     // ============================================
-    // HELPER FUNCTIONS
+    // 5. MAIN FLOW
     // ============================================
+    async function main() {
+        const cam = await setupCamera();
+        if(!cam) { alert("Lỗi Camera! Không thể giám sát."); return; }
+        
+        const ai = await loadModels();
+        if(!ai) return;
 
-    function canLogViolation(type) {
-        if (isSubmitting) return false;
-        
-        const lastLog = state.lastLogTime[type] || 0;
-        const timeSince = Date.now() - lastLog;
-        
-        if (timeSince > CONFIG.logCooldown) {
+        // KÍCH HOẠT CÁC LÁ CHẮN BẢO MẬT (Quan trọng)
+        setupSecurityListeners();
+
+        startTimer();
+        videoInterval = setInterval(detectFaces, CONFIG.face.detectionInterval);
+        if(CONFIG.object.enabled) setInterval(detectObjects, CONFIG.object.scanInterval);
+    }
+
+    function startTimer() {
+        let timeLeft = DURATION; // Biến từ PHP
+        const interval = setInterval(() => {
+            timeLeft--;
+            const m = Math.floor(timeLeft / 60).toString().padStart(2,'0');
+            const s = (timeLeft % 60).toString().padStart(2,'0');
+            timerElement.textContent = `${Math.floor(timeLeft/3600)}:${m}:${s}`;
+            if(timeLeft <= 0) {
+                clearInterval(interval);
+                alert("Hết giờ!");
+                testForm.submit();
+            }
+        }, 1000);
+    }
+
+    // --- Helpers ---
+    function canLog(type) {
+        if(window.isSubmitting) return false;
+        const last = state.lastLogTime[type] || 0;
+        if (Date.now() - last > CONFIG.logCooldown) {
             state.lastLogTime[type] = Date.now();
             return true;
         }
@@ -551,127 +290,94 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function captureFrame() {
         try {
-            const context = captureCanvas.getContext('2d');
-            if (webcamElement.videoWidth > 0 && webcamElement.videoHeight > 0) {
-                captureCanvas.width = webcamElement.videoWidth;
-                captureCanvas.height = webcamElement.videoHeight;
-                context.drawImage(webcamElement, 0, 0, captureCanvas.width, captureCanvas.height);
-                return captureCanvas.toDataURL('image/jpeg', 0.85);
-            }
-        } catch (e) {
-            console.error("Capture error:", e);
-        }
-        return null;
+            const ctx = captureCanvas.getContext('2d');
+            captureCanvas.width = webcamElement.videoWidth;
+            captureCanvas.height = webcamElement.videoHeight;
+            ctx.drawImage(webcamElement, 0, 0);
+            return captureCanvas.toDataURL('image/jpeg', 0.7);
+        } catch(e) { return null; }
     }
 
-    async function logCheating(type, details, imageData) {
-        if (isSubmitting) return;
-
-        console.log(`📸 Violation logged: ${type} - ${details}`);
-        
-        const formData = new FormData();
-        formData.append('attempt_id', ATTEMPT_ID);
-        formData.append('violation_type', type);
-        formData.append('details', details);
-        if (imageData) {
-            formData.append('screenshot', imageData);
-        }
-
-        try {
-            const response = await fetch('log_cheating.php', { 
-                method: 'POST', 
-                body: formData 
-            });
-            
-            if (!response.ok) {
-                console.error(`HTTP error: ${response.status}`);
-            }
-        } catch (error) {
-            console.error('Network error:', error);
-        }
-    }
-
-    // ============================================
-    // MAIN INITIALIZATION
-    // ============================================
-
-    async function main() {
-        console.log('Starting proctoring system...');
-        
-        const cameraReady = await setupCamera();
-        if (!cameraReady) {
-            alert("Không thể truy cập camera. Vui lòng cấp quyền và tải lại.");
-            return;
-        }
-
-        const modelsReady = await loadModels();
-        if (!modelsReady) {
-            return; // Alert already shown in loadModels
-        }
-
-        startTimer();
-        
-        // Start face detection
-        videoInterval = setInterval(detectFaces, CONFIG.detectionInterval);
-        
-        // Object detection will start automatically when loaded
-        
-        console.log('✓ Proctoring system active');
-        console.log('📊 Face detection: ACTIVE');
-        console.log('📊 Object detection: Loading in background...');
-    }
-
-    // ============================================
-    // TIMER & FORM HANDLING
-    // ============================================
-
-    function startTimer() {
-        let timeLeft = DURATION;
-        timerInterval = setInterval(() => {
-            timeLeft--;
-            const hours = Math.floor(timeLeft / 3600);
-            const minutes = Math.floor((timeLeft % 3600) / 60);
-            const seconds = timeLeft % 60;
-            
-            let timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            if (hours > 0) timeString = `${hours}:${timeString}`;
-            
-            timerElement.textContent = timeString;
-            
-            if (timeLeft <= 300) {
-                timerElement.style.background = '#e74c3c';
-                timerElement.style.color = 'white';
-            }
-
-            if (timeLeft <= 0) {
-                endTest();
-            }
-        }, 1000);
-    }
-
-    function endTest() {
-        isSubmitting = true;
-        clearInterval(timerInterval);
-        if (videoInterval) clearInterval(videoInterval);
-        if (objectDetectionInterval) clearInterval(objectDetectionInterval);
-        
-        alert('Hết giờ làm bài!');
-        testForm.submit();
-    }
-
+    // Events
     startButton.addEventListener('click', () => {
-        document.documentElement.requestFullscreen().then(() => {
-            startOverlay.style.display = 'none';
-            testContent.style.display = 'block';
-            timerElement.style.display = 'block';
-            proctoringContainer.style.display = 'block';
-            main();
-        }).catch(err => {
-            alert(`❌ Không thể vào toàn màn hình: ${err.message}`);
-        });
+        document.documentElement.requestFullscreen().catch(e=>console.log(e));
+        startOverlay.style.display = 'none';
+        testContent.style.display = 'block';
+        timerElement.style.display = 'block';
+        proctoringContainer.style.display = 'block';
+        main();
     });
 
-    testForm.addEventListener('submit', () => {
-        isSubmitting = true;
-    });
+    testForm.addEventListener('submit', () => { window.isSubmitting = true; });
 });
+
+// ============================================
+// 6. GLOBAL FUNCTIONS (LOG & TOAST)
+// ============================================
+
+window.logCheating = async function(type, details, imageData) {
+    if (window.isSubmitting) return;
+    if (typeof ATTEMPT_ID === 'undefined') return;
+
+    const formData = new FormData();
+    formData.append('attempt_id', ATTEMPT_ID);
+    formData.append('violation_type', type);
+    formData.append('details', details);
+    if (imageData) formData.append('screenshot', imageData);
+
+    try {
+        const res = await fetch('log_cheating.php', { method: 'POST', body: formData });
+        if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'suspended') {
+                window.showSuspendedScreen(data.reason, data.total_violations);
+                window.isSubmitting = true;
+            } else if (data.status === 'warning') {
+                window.showViolationToast(data.message, data.remaining, data.limit);
+            }
+        }
+    } catch(e) { console.error(e); }
+};
+
+window.showViolationToast = function(msg, remaining, limit) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    let conf = { color: 'border-amber-500', bg: 'bg-white', icon: '⚠️', sub: '' };
+    
+    if (remaining < 0) { conf.sub = 'Đã ghi lại hành vi.'; conf.color = 'border-blue-500'; }
+    else if (remaining === 0) {
+        conf.bg = 'bg-red-50'; conf.color = 'border-red-600'; conf.icon = '☠️';
+        conf.sub = '<b class="text-red-700">CẢNH BÁO CUỐI! (0 lần)</b>';
+    } else {
+        conf.sub = `Còn <b class="text-orange-600">${remaining}</b>/${limit} lần.`;
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast-enter pointer-events-auto w-full p-4 rounded-lg shadow-xl border-l-4 ${conf.color} ${conf.bg} flex items-start gap-3 mb-2 backdrop-blur-md relative`;
+    toast.innerHTML = `
+        <div class="mt-1 text-xl">${conf.icon}</div>
+        <div class="flex-1">
+            <h4 class="font-bold text-gray-800 text-sm uppercase">CẢNH BÁO</h4>
+            <p class="font-bold text-gray-900 text-sm mt-1">${msg}</p>
+            <div class="text-xs mt-1 text-slate-600">${conf.sub}</div>
+        </div>
+        <button onclick="this.parentElement.remove()" class="absolute top-2 right-2 text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 8000);
+};
+
+window.showSuspendedScreen = function(reason, count) {
+    document.body.innerHTML = `
+        <div style="position: fixed; inset: 0; background: #450a0a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: sans-serif; text-align: center; z-index: 99999;">
+            <div style="font-size: 80px; margin-bottom: 20px;">🚫</div>
+            <h1 style="font-size: 32px; font-weight: bold; color: #fca5a5;">ĐÌNH CHỈ THI</h1>
+            <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px; max-width: 600px; margin-top: 20px;">
+                <p style="font-size: 18px;">${reason}</p>
+                <p style="font-size: 14px; color: #ccc; margin-top: 10px;">Tổng lỗi: ${count}</p>
+            </div>
+            <a href="index.php" style="margin-top: 30px; background: white; color: #7f1d1d; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold;">VỀ TRANG CHỦ</a>
+        </div>
+    `;
+};

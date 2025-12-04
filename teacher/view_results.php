@@ -22,7 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         'tab_switch' => intval($_POST['max_tab_switch']),
         'right_click' => intval($_POST['max_right_click']),
         'copy_paste' => intval($_POST['max_copy_paste']),
-        'face_missing' => intval($_POST['max_face_missing'])
+        'face_missing' => intval($_POST['max_face_missing']),
+        'multiple_faces' => intval($_POST['max_multiple_faces'])
     ];
     $json_rules = json_encode($rules);
     
@@ -523,6 +524,15 @@ foreach ($all_logs as $log) {
                             <span class="ml-2 text-xs text-purple-600 font-medium">lần</span>
                         </div>
                     </div>
+                    <div class="flex justify-between items-center p-3 bg-purple-50 rounded-lg border border-purple-300 hover:border-purple-300 transition-colors">
+                        <label class="text-sm font-bold text-purple-800 flex items-center">
+                            <i class="fa-solid fa-people-group w-6"></i> Phát hiện nhiều người tối đa:
+                        </label>
+                        <div class="flex items-center">
+                            <input type="number" name="max_multiple_faces" value="<?php echo $current_rules['multiple_faces'] ?? 0; ?>" class="w-20 border border-purple-300 rounded-md px-2 py-1 text-center font-bold text-purple-700 focus:ring-2 focus:ring-purple-500 outline-none shadow-sm" min="0">
+                            <span class="ml-2 text-xs text-purple-600 font-medium">lần</span>
+                        </div>
+                    </div>
                 </div>
                 <p class="text-xs text-slate-400 mt-4 italic text-center">* Điền số 0 để tắt tính năng tự động phạt cho lỗi đó.</p>
                 
@@ -671,7 +681,7 @@ foreach ($all_logs as $log) {
             }
         }
 
-        // Các hàm hỗ trợ khác (View Mode, Filter, Chat, Gallery...)
+
         function toggleViewMode() {
             document.getElementById('table-view').classList.toggle('hidden');
             document.getElementById('grid-view').classList.toggle('hidden');
