@@ -1,7 +1,6 @@
 // Enhanced AI Proctoring System - ALL IN ONE
 // Bao gồm: AI Detect + Chặn chuột/Phím/Tab + Popup Cảnh báo
 
-// --- BIẾN TOÀN CỤC ---
 window.isSubmitting = false;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -21,43 +20,35 @@ document.addEventListener('DOMContentLoaded', () => {
     let cocoSsdModel = null;
     let videoInterval, objectDetectionInterval;
 
-    // ============================================
-    // 1. CONFIGURATION
-    // ============================================
+    // CONFIGURATION
     const CONFIG = {
         face: {
             yawThreshold: 40, pitchDownThreshold: 30, pitchUpThreshold: 25,
-            minViolationDuration: 2500, // 2.5s mới bắt lỗi
-            detectionInterval: 500,
+            minViolationDuration: 2500, detectionInterval: 500,
         },
-        noFace: { duration: 6000, warningDuration: 3000 },
+        noFace: { duration: 4000, warningDuration: 3000 },
         multipleFace: { duration: 4000 },
         object: { enabled: false, scanInterval: 2000 },
-        logCooldown: 5000, // Giãn cách log lỗi (5s)
+        logCooldown: 5000,
     };
 
-    // ============================================
-    // 2. STATE MANAGEMENT
-    // ============================================
     const state = {
         face: { lastSeen: Date.now(), startTime: null },
         lastLogTime: {},
         calibration: { isCalibrated: false, samples: [], neutralYaw: 0, neutralPitch: 0 }
     };
 
-    // ============================================
-    // 3. SECURITY EVENTS (CHẶN MOUSE, KEY, TAB)
-    // ============================================
+    // 1. SECURITY LISTENERS (CHẶN CHUỘT/PHÍM/TAB)
     function setupSecurityListeners() {
-        console.log("🛡️ Đang kích hoạt lá chắn bảo mật...");
-
-        // A. Chặn chuột phải
+        console.log("🛡️ Kích hoạt bảo mật...");
+        
+        // Chặn chuột phải
         document.addEventListener('contextmenu', event => {
             event.preventDefault();
             window.logCheating('right_click', 'Cố tình bấm chuột phải', null);
         });
 
-        // B. Chặn Copy/Paste/Cut
+        // Chặn Copy/Paste
         ['copy', 'paste', 'cut'].forEach(evt => {
             document.addEventListener(evt, (e) => {
                 e.preventDefault();
@@ -65,46 +56,38 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // C. Phát hiện chuyển Tab / Thu nhỏ
+        // Chuyển tab
         document.addEventListener("visibilitychange", () => {
             if (document.hidden) {
                 window.logCheating('switched_tab', 'Rời khỏi màn hình thi', null);
             }
         });
 
-        // D. Phát hiện click ra ngoài (Mất focus)
+        // Click ra ngoài
         window.addEventListener("blur", () => {
             if (document.activeElement === document.body) {
                 window.logCheating('window_blur', 'Click ra ngoài khu vực thi', null);
             }
         });
 
-        // E. Chặn phím cấm (F12, Ctrl+P, PrintScreen...)
+        // Phím cấm
         document.addEventListener('keydown', function(e) {
-            if (
-                e.key === "F12" || 
-                (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "i" || e.key === "C" || e.key === "c")) ||
-                (e.ctrlKey && (e.key === "p" || e.key === "P" || e.key === "u" || e.key === "U"))
-            ) {
+            if (e.key === "F12" || (e.ctrlKey && (e.key === "p" || e.key === "P"))) {
                 e.preventDefault();
                 window.logCheating('devtools_key_attempt', 'Sử dụng phím tắt cấm', null);
             }
         });
     }
 
-    // ============================================
-    // 4. CAMERA & AI LOGIC
-    // ============================================
+    // 2. CAMERA & AI
     async function setupCamera() {
         try {
             statusBox.textContent = 'Đang khởi động camera...';
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false 
-            });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
             webcamElement.srcObject = stream;
             return new Promise(resolve => webcamElement.onloadedmetadata = () => resolve(webcamElement));
         } catch (error) {
-            statusBox.textContent = "Không thể truy cập camera";
+            statusBox.textContent = "Không tìm thấy Camera";
             return null;
         }
     }
@@ -112,70 +95,57 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadModels() {
         statusBox.textContent = 'Đang tải AI...';
         try {
+            // Face Mesh
             const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-            const config = {
-                runtime: 'mediapipe', solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh',
-                maxFaces: 3, refineLandmarks: false
-            };
+            const config = { runtime: 'mediapipe', solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh', maxFaces: 3, refineLandmarks: false };
             faceMeshModel = await faceLandmarksDetection.createDetector(model, config);
             
-            // Load Object Detection ẩn (Lazy load)
+            // Object Detection (Lazy load)
             (async () => {
-                try {
-                    if (typeof cocoSsd !== 'undefined') {
-                        cocoSsdModel = await cocoSsd.load();
-                        CONFIG.object.enabled = true;
-                    }
-                } catch(e) {}
+                try { if (typeof cocoSsd !== 'undefined') cocoSsdModel = await cocoSsd.load(); } catch(e){}
             })();
 
             statusBox.textContent = 'Hệ thống sẵn sàng';
             return true;
         } catch (error) {
             statusBox.textContent = "Lỗi tải AI";
-            alert("Lỗi tải AI Model. Vui lòng tải lại trang.");
             return false;
         }
     }
 
-    // --- AI: Face Logic ---
     async function detectFaces() {
         if (!faceMeshModel || !webcamElement || webcamElement.readyState < 2) return;
-        
         try {
             const predictions = await faceMeshModel.estimateFaces(webcamElement, { flipHorizontal: false });
-
+            
             // 1. Không thấy mặt
             if (predictions.length === 0) {
                 if (!state.face.startTime) state.face.startTime = Date.now();
                 const duration = Date.now() - state.face.startTime;
                 
-                if (duration > CONFIG.noFace.warningDuration) statusBox.textContent = "⚠️ Không tìm thấy khuôn mặt";
-                if (duration > CONFIG.noFace.duration && canLog('no_face_detected')) {
-                    window.logCheating('no_face_detected', `Mất mặt ${Math.round(duration/1000)}s`, captureFrame());
+                // Cập nhật trạng thái liên tục
+                statusBox.textContent = `⚠️ Không tìm thấy khuôn mặt (${Math.floor(duration/1000)}s)`;
+
+                // Nếu mất mặt quá 2 giây (2000ms) là bắt đầu cảnh báo ngay
+                // CONFIG.noFace.duration nên set thấp xuống (ví dụ 2000)
+                if (duration > 2000 && canLog('no_face_detected')) {
+                    window.logCheating('no_face_detected', `Không tìm thấy khuôn mặt trong ${Math.floor(duration/1000)}s`, captureFrame());
                 }
                 return;
             }
             state.face.startTime = null;
 
-            // 2. Nhiều người
             if (predictions.length > 1) {
                 statusBox.textContent = `⚠️ Phát hiện ${predictions.length} người`;
-                if (canLog('multiple_faces')) {
-                    window.logCheating('multiple_faces', `Phát hiện ${predictions.length} người`, captureFrame());
-                }
+                if (canLog('multiple_faces')) window.logCheating('multiple_faces', `Phát hiện ${predictions.length} người`, captureFrame());
                 return;
             }
 
-            // 3. Hướng nhìn (Head Pose)
-            const keypoints = predictions[0].keypoints;
-            const pose = calculateHeadPose(keypoints);
+            const pose = calculateHeadPose(predictions[0].keypoints);
             if (pose) analyzePose(pose);
-
-        } catch (e) { console.error(e); }
+        } catch (e) {}
     }
 
-    // --- AI: Pose Calculation ---
     function calculateHeadPose(kp) {
         const nose = kp.find(p => p.name === 'noseTip');
         const leftCheek = kp.find(p => p.index === 234);
@@ -184,29 +154,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const rangeX = Math.abs(leftCheek.x - rightCheek.x);
         const midX = (leftCheek.x + rightCheek.x) / 2;
-        // Yaw: Độ lệch của mũi so với trung tâm 2 má
-        const yaw = ((nose.x - midX) / rangeX) * 100; // Giá trị tương đối
+        const yaw = ((nose.x - midX) / rangeX) * 100;
         
         const eyeLine = (kp.find(p=>p.name==='leftEye').y + kp.find(p=>p.name==='rightEye').y)/2;
         const chin = kp.find(p=>p.index===152).y;
         const faceH = Math.abs(chin - eyeLine);
-        // Pitch: Độ cao mũi
         const pitch = ((nose.y - eyeLine) / faceH) * 100;
-
         return { yaw, pitch };
     }
 
     function analyzePose(pose) {
-        // Auto Calibrate (Lấy mẫu vị trí ngồi ban đầu)
         if (!state.calibration.isCalibrated) {
             state.calibration.samples.push(pose);
             if(state.calibration.samples.length > 20) {
-                const avgY = state.calibration.samples.reduce((a,b)=>a+b.yaw,0)/20;
-                const avgP = state.calibration.samples.reduce((a,b)=>a+b.pitch,0)/20;
-                state.calibration.neutralYaw = avgY;
-                state.calibration.neutralPitch = avgP;
+                state.calibration.neutralYaw = state.calibration.samples.reduce((a,b)=>a+b.yaw,0)/20;
+                state.calibration.neutralPitch = state.calibration.samples.reduce((a,b)=>a+b.pitch,0)/20;
                 state.calibration.isCalibrated = true;
-                statusBox.textContent = "✅ Đã hiệu chuẩn tư thế";
+                statusBox.textContent = "✅ Đã hiệu chuẩn";
             } else {
                 statusBox.textContent = `Đang hiệu chuẩn... ${state.calibration.samples.length * 5}%`;
             }
@@ -215,9 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const dy = pose.yaw - state.calibration.neutralYaw;
         const dp = pose.pitch - state.calibration.neutralPitch;
-
-        let msg = '';
-        let type = '';
+        let msg = ''; let type = '';
 
         if (Math.abs(dy) > 25) { msg = "Quay mặt quá mức"; type = "looking_away"; }
         else if (dp > 20) { msg = "Cúi đầu xuống"; type = "head_down"; }
@@ -226,44 +188,28 @@ document.addEventListener('DOMContentLoaded', () => {
         if (msg) {
             statusBox.textContent = `⚠️ ${msg}`;
             if (canLog(type)) window.logCheating(type, msg, captureFrame());
-        } else {
-            if (statusBox.textContent.includes('⚠️')) statusBox.textContent = "Tư thế bình thường";
+        } else if (statusBox.textContent.includes('⚠️')) statusBox.textContent = "Tư thế bình thường";
+    }
+
+    // 3. MAIN FLOW
+    async function main() {
+        // QUAN TRỌNG: Bật bảo mật TRƯỚC khi bật camera
+        setupSecurityListeners(); 
+
+        const cam = await setupCamera();
+        if(!cam) alert("Không tìm thấy Camera! Tuy nhiên bài thi vẫn được giám sát thao tác.");
+        
+        const ai = await loadModels();
+
+        startTimer();
+
+        if (cam && ai) {
+            videoInterval = setInterval(detectFaces, CONFIG.face.detectionInterval);
         }
     }
 
-    // --- AI: Object Logic ---
-    async function detectObjects() {
-        if (!CONFIG.object.enabled || !cocoSsdModel) return;
-        try {
-            const predictions = await cocoSsdModel.detect(webcamElement);
-            const phone = predictions.find(p => p.class === 'cell phone' && p.score > 0.6);
-            if (phone) {
-                statusBox.textContent = "⚠️ Phát hiện điện thoại";
-                if(canLog('phone_detected')) window.logCheating('phone_detected', 'Sử dụng điện thoại', captureFrame());
-            }
-        } catch(e){}
-    }
-
-    // ============================================
-    // 5. MAIN FLOW
-    // ============================================
-    async function main() {
-        const cam = await setupCamera();
-        if(!cam) { alert("Lỗi Camera! Không thể giám sát."); return; }
-        
-        const ai = await loadModels();
-        if(!ai) return;
-
-        // KÍCH HOẠT CÁC LÁ CHẮN BẢO MẬT (Quan trọng)
-        setupSecurityListeners();
-
-        startTimer();
-        videoInterval = setInterval(detectFaces, CONFIG.face.detectionInterval);
-        if(CONFIG.object.enabled) setInterval(detectObjects, CONFIG.object.scanInterval);
-    }
-
     function startTimer() {
-        let timeLeft = DURATION; // Biến từ PHP
+        let timeLeft = DURATION;
         const interval = setInterval(() => {
             timeLeft--;
             const m = Math.floor(timeLeft / 60).toString().padStart(2,'0');
@@ -277,7 +223,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 1000);
     }
 
-    // --- Helpers ---
     function canLog(type) {
         if(window.isSubmitting) return false;
         const last = state.lastLogTime[type] || 0;
@@ -298,9 +243,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch(e) { return null; }
     }
 
-    // Events
     startButton.addEventListener('click', () => {
-        document.documentElement.requestFullscreen().catch(e=>console.log(e));
+        document.documentElement.requestFullscreen().catch(e=>{});
         startOverlay.style.display = 'none';
         testContent.style.display = 'block';
         timerElement.style.display = 'block';
@@ -311,10 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
     testForm.addEventListener('submit', () => { window.isSubmitting = true; });
 });
 
-// ============================================
-// 6. GLOBAL FUNCTIONS (LOG & TOAST)
-// ============================================
-
+// GLOBAL FUNCTIONS
 window.logCheating = async function(type, details, imageData) {
     if (window.isSubmitting) return;
     if (typeof ATTEMPT_ID === 'undefined') return;
@@ -336,13 +277,12 @@ window.logCheating = async function(type, details, imageData) {
                 window.showViolationToast(data.message, data.remaining, data.limit);
             }
         }
-    } catch(e) { console.error(e); }
+    } catch(e) {}
 };
 
 window.showViolationToast = function(msg, remaining, limit) {
     const container = document.getElementById('toast-container');
     if (!container) return;
-
     let conf = { color: 'border-amber-500', bg: 'bg-white', icon: '⚠️', sub: '' };
     
     if (remaining < 0) { conf.sub = 'Đã ghi lại hành vi.'; conf.color = 'border-blue-500'; }

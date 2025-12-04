@@ -57,7 +57,7 @@ $attempt = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$attempt) die("Lần làm bài không tồn tại.");
 
-// CHECK ĐÌNH CHỈ (Server-side check)
+// CHECK ĐÌNH CHỈ (Server-side check) - Nếu vào lại trang mà đã bị ban thì hiện luôn
 if ($attempt['status'] === 'suspended') {
     die("
         <div style='height:100vh; display:flex; align-items:center; justify-content:center; background-color:#450a0a; color:white; flex-direction:column; text-align:center; font-family:sans-serif;'>
@@ -215,9 +215,7 @@ $answers_stmt = $pdo->prepare("SELECT * FROM answers WHERE question_id = ? ORDER
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection"></script>
@@ -235,22 +233,20 @@ $answers_stmt = $pdo->prepare("SELECT * FROM answers WHERE question_id = ? ORDER
                 .then(r => r.json())
                 .then(data => {
                     if (data.status === 'success') {
-                        // 1. Kiểm tra bị đình chỉ
+                        // 1. Kiểm tra bị đình chỉ (CHỈ dùng logic này để hiện màn hình đỏ)
                         if (data.exam_status === 'suspended') {
-                            // Gọi hàm hiển thị màn hình đỏ từ take_test.js
                             if (typeof window.showSuspendedScreen === 'function') {
                                 window.showSuspendedScreen("Vi phạm quy chế thi quá nhiều lần.", "Đã bị đình chỉ");
                             } else {
-                                // Fallback nếu chưa load JS
+                                // Fallback màn hình đỏ
                                 document.body.innerHTML = `
                                     <div style="position:fixed; inset:0; background:#450a0a; color:white; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; z-index:99999;">
                                         <h1 style="font-size:32px; font-weight:bold; color:#fca5a5;">ĐÌNH CHỈ THI</h1>
-                                        <p>Bạn đã bị đình chỉ.</p>
+                                        <p>Bạn đã bị đình chỉ do vi phạm quy chế.</p>
                                         <a href="index.php" style="margin-top:20px; background:white; color:#450a0a; padding:10px 20px; border-radius:5px; text-decoration:none; font-weight:bold;">Về trang chủ</a>
                                     </div>
                                 `;
                             }
-                            // QUAN TRỌNG: Dừng kiểm tra, không alert, không redirect ngay lập tức
                             return; 
                         }
                         
@@ -269,7 +265,7 @@ $answers_stmt = $pdo->prepare("SELECT * FROM answers WHERE question_id = ? ORDER
                         }
                     }
                 })
-                .catch(e => console.error("Status check failed (offline?)"));
+                .catch(e => console.error("Status check failed"));
         }
         
         // Chạy kiểm tra mỗi 3 giây

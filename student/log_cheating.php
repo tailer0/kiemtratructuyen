@@ -33,7 +33,7 @@ try {
             $friendly_name = "Không tìm thấy khuôn mặt";
             break;
         case 'multiple_faces':
-            $standard_type = 'face_missing';
+            $standard_type = 'multiple_faces'; 
             $friendly_name = "Phát hiện nhiều người";
             break;
         case 'contextmenu':
@@ -47,6 +47,10 @@ try {
             $standard_type = 'copy_paste';
             $friendly_name = "Thao tác Copy/Paste";
             break;
+        case 'phone_detected':
+             $standard_type = 'phone_detected';
+             $friendly_name = "Phát hiện điện thoại";
+             break;    
     }
 
     // 3. XỬ LÝ ẢNH (Lưu ảnh bằng chứng)
@@ -65,9 +69,9 @@ try {
         } catch (Exception $e) {}
     }
 
-    // 4. GHI LOG VÀO DATABASE
+    // 4. GHI LOG VÀO DB
     $stmt = $pdo->prepare("INSERT INTO cheating_logs (attempt_id, log_type, details, proof_image, timestamp) VALUES (?, ?, ?, ?, NOW())");
-    $stmt->execute([$attempt_id, $standard_type, $details . " (Gốc: $raw_type)", $proof_image_path]);
+    $stmt->execute([$attempt_id, $standard_type, $details, $proof_image_path]);
 
     // 5. TÍNH TOÁN GIỚI HẠN & AUTO BAN
     $stmt = $pdo->prepare("SELECT test_id FROM test_attempts WHERE id = ?");
@@ -78,7 +82,7 @@ try {
     $stmt->execute([$test_id]);
     $rules = json_decode($stmt->fetchColumn() ?? '{}', true);
 
-    $remaining = -1; // -1 nghĩa là không giới hạn
+    $remaining = -1; // Mặc định là -1 (Không giới hạn/Chỉ cảnh báo)
     $limit = 0;
     $current_count = 0;
 
@@ -90,20 +94,16 @@ try {
         $cntStmt->execute([$attempt_id, $standard_type]);
         $current_count = $cntStmt->fetchColumn();
 
-        // Tính số lần còn lại
         $remaining = $limit - $current_count;
 
-        // --- NẾU VƯỢT QUÁ GIỚI HẠN -> BAN ---
         if ($current_count >= $limit) {
-            $ban_reason = "Vi phạm lỗi '$friendly_name' quá $limit lần ($current_count/$limit).";
+            $ban_reason = "Vi phạm lỗi '$friendly_name' quá $limit lần.";
             
             $pdo->prepare("UPDATE test_attempts SET status = 'suspended', score = 0, end_time = NOW() WHERE id = ?")->execute([$attempt_id]);
             $pdo->prepare("INSERT INTO cheating_logs (attempt_id, log_type, details) VALUES (?, 'system_ban', ?)")->execute([$attempt_id, "AUTO BAN: $ban_reason"]);
 
-            // Trả về lệnh đình chỉ
             echo json_encode([
                 'status' => 'suspended', 
-                'message' => "BẠN ĐÃ BỊ ĐÌNH CHỈ THI!",
                 'reason' => $ban_reason,
                 'total_violations' => $current_count
             ]);
@@ -113,11 +113,10 @@ try {
 
     // --- TRẢ VỀ CẢNH BÁO (WARNING) KÈM SỐ LẦN ---
     echo json_encode([
-        'status' => 'warning', // Dùng status warning để JS hiện popup
+        'status' => 'warning',
         'message' => $friendly_name,
-        'remaining' => $remaining, // Số lần còn lại (< 0 là ko giới hạn)
-        'limit' => $limit,
-        'current' => $current_count
+        'remaining' => $remaining,
+        'limit' => $limit
     ]);
 
 } catch (Exception $e) {
