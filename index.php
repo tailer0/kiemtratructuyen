@@ -112,7 +112,7 @@ if (isset($_SESSION['user_id'])) {
             <div class="flex items-center justify-between h-20">
                 <div class="flex items-center gap-2">
                     <i class="fa-solid text-3xl text-indigo-500 animate-pulse-slow"></i>
-                    <span class="font-display font-bold text-2xl tracking-tighter">OnlineTest<span class="text-indigo-500">.VN</span></span>
+                    <span class="font-display font-bold text-2xl tracking-tighter">OnlineTest</span>
                 </div>
                 <div class="hidden md:flex items-center space-x-8">
                     <a href="#features" class="text-sm font-medium text-gray-300 hover:text-white transition-colors">Tính năng</a>
@@ -139,7 +139,7 @@ if (isset($_SESSION['user_id'])) {
                 </span>
                 <h1 class="text-5xl md:text-7xl font-display font-bold mb-6 leading-tight">
                     Khảo thí Thông minh <br>
-                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">Được hỗ trợ bởi Tensorflow</span>
+                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-200">Được hỗ trợ bởi Tensorflow</span>
                 </h1>
                 <p class="text-lg md:text-xl text-gray-400 mb-10 max-w-2xl mx-auto">
                     Hệ thống kiểm tra trực tuyến tích hợp trí tuệ nhân tạo để giám sát hành vi, chống gian lận và đảm bảo tính công bằng tuyệt đối.
@@ -386,10 +386,10 @@ if (isset($_SESSION['user_id'])) {
 
         // 2. Initialize Vanilla Tilt for 3D Cards
         VanillaTilt.init(document.querySelectorAll(".tilt-card"), {
-            max: 15, // Độ nghiêng tối đa
-            speed: 400,
+            max: 2, // Độ nghiêng tối đa
+            speed: 100,
             glare: true,
-            "max-glare": 0.2,
+            "max-glare": 0.1,
             scale: 1.02
         });
 
@@ -408,7 +408,7 @@ if (isset($_SESSION['user_id'])) {
         // 4. Navbar Scroll Effect
         window.addEventListener('scroll', function() {
             const navbar = document.getElementById('navbar');
-            if (window.scrollY > 50) {
+            if (window.scrollY > 30) {
                 navbar.classList.add('bg-slate-900/80', 'backdrop-blur-md', 'shadow-lg');
             } else {
                 navbar.classList.remove('bg-slate-900/80', 'backdrop-blur-md', 'shadow-lg');

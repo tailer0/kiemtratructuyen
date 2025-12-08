@@ -104,7 +104,7 @@ $accuracy = $total_questions > 0 ? round(($total_correct_count / $total_question
     <div class="max-w-4xl mx-auto space-y-6">
 
         <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            <div class="bg-indigo-600 px-6 py-4 flex justify-between items-center">
+            <div class="bg-green-800 px-6 py-4 flex justify-between items-center">
                 <h1 class="text-white font-bold text-lg"><i class="fa-solid fa-chart-pie mr-2"></i> Kết quả bài thi</h1>
                 <a href="index.php" class="text-indigo-100 hover:text-white text-sm font-medium transition-colors">
                     <i class="fa-solid fa-house mr-1"></i> Trang chủ

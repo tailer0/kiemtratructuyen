@@ -68,7 +68,7 @@ $tests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <body class="bg-slate-50 text-slate-800 min-h-screen">
 
     <!-- Header Section -->
-    <div class="bg-gradient-to-r from-indigo-600 to-purple-700 pb-24 pt-12 px-4 shadow-lg">
+    <div class="bg-gradient-to-r from-green-600 to-green-700 pb-24 pt-12 px-4 shadow-lg">
         <div class="max-w-5xl mx-auto">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-white">
                 <div>
@@ -105,7 +105,7 @@ $tests = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <div class="space-y-4">
             <div class="flex items-center justify-between mb-2">
                 <h2 class="text-xl font-bold text-slate-800 flex items-center">
-                    <i class="fa-solid fa-file-signature text-indigo-600 mr-2"></i> Danh sách bài kiểm tra
+                    <i class="fa-solid fa-file-signature text-black-600 mr-2"></i> Danh sách bài kiểm tra
                 </h2>
                 <span class="text-sm font-medium text-slate-500 bg-white px-3 py-1 rounded-full shadow-sm border border-slate-200">
                     <?php echo count($tests); ?> bài thi

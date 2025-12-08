@@ -52,7 +52,7 @@ unset($_SESSION['success_msg']);
 <body class="bg-gray-50 text-slate-800 h-screen flex overflow-hidden">
 
     <!-- SIDEBAR -->
-    <aside class="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col z-10">
+    <aside class="w-64 bg-gray-100 border-r border-gray-200 hidden md:flex flex-col z-10">
         <div class="h-16 flex items-center px-6 border-b border-gray-100">
             <i class="fa-solid text-indigo-600 text-2xl mr-2"></i>
             <span class="text-xl font-bold text-slate-800">OnlineTest</span>
@@ -81,7 +81,7 @@ unset($_SESSION['success_msg']);
     <!-- MAIN CONTENT -->
     <div class="flex-1 flex flex-col h-screen overflow-hidden relative">
         <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
-            <h1 class="text-xl font-bold text-slate-800">Góc học tập</h1>
+            <h1 class="text-xl font-bold text-slate-800">Lớp học của bạn</h1>
         </header>
 
         <main class="flex-1 overflow-y-auto p-6 bg-gray-50">
@@ -100,8 +100,8 @@ unset($_SESSION['success_msg']);
                     <h2 class="text-lg font-bold text-slate-800 mb-2"><i class="fa-solid fa-users-rectangle mr-2 text-indigo-500"></i>Tham gia lớp học</h2>
                     <p class="text-sm text-slate-500 mb-4">Nhập mã lớp do giáo viên cung cấp.</p>
                     <form action="join_class.php" method="POST" class="flex gap-2">
-                        <input type="text" name="class_code" placeholder="Mã lớp (VD: 862086)" required class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none uppercase text-sm">
-                        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm whitespace-nowrap">
+                        <input type="text" name="class_code" placeholder="Mã lớp (VD: 470CB6)" required class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none uppercase text-sm">
+                        <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium text-sm whitespace-nowrap">
                             Tham gia
                         </button>
                     </form>
@@ -118,7 +118,7 @@ unset($_SESSION['success_msg']);
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <?php foreach ($my_classes as $class): ?>
                         <div class="bg-white rounded-xl shadow-sm hover:shadow-md transition-all border border-gray-200 overflow-hidden flex flex-col h-full">
-                            <div class="h-20 bg-gradient-to-r from-indigo-500 to-purple-600 p-4">
+                            <div class="h-20 bg-gradient-to-r from-emerald-800 to-green-400 p-4">
                                 <h3 class="text-white font-bold text-lg truncate"><?php echo htmlspecialchars($class['class_name']); ?></h3>
                                 <p class="text-indigo-100 text-xs">GV: <?php echo htmlspecialchars($class['teacher_name']); ?></p>
                             </div>
@@ -130,7 +130,7 @@ unset($_SESSION['success_msg']);
                                     <span class="text-xs font-medium bg-green-100 text-green-700 px-2 py-1 rounded">
                                         <?php echo $class['active_tests']; ?> bài thi đang mở
                                     </span>
-                                    <a href="view_class.php?id=<?php echo $class['id']; ?>" class="text-indigo-600 hover:underline text-sm font-medium">
+                                    <a href="view_class.php?id=<?php echo $class['id']; ?>" class="text-black-600 hover:underline text-sm font-medium">
                                         Vào lớp <i class="fa-solid fa-arrow-right ml-1"></i>
                                     </a>
                                 </div>

@@ -188,8 +188,8 @@ $tests = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <?php echo date('d/m/Y', strtotime($test['created_at'])); ?>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                    <a href="view_results.php?test_id=<?php echo $test['id']; ?>" class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded transition-colors inline-flex items-center">
-                                        <i class="fa-solid fa-square-poll-vertical mr-1"></i> KQ
+                                    <a href="view_results.php?test_id=<?php echo $test['id']; ?>" class="text-teal-600 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded transition-colors inline-flex items-center">
+                                        <i class="fa-solid fa-square-poll-vertical mr-1"></i> Quản lý
                                     </a>
                                     <a href="edit_test.php?test_id=<?php echo $test['id']; ?>" class="text-amber-600 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded transition-colors inline-flex items-center">
                                         <i class="fa-solid fa-pen-to-square"></i>
@@ -208,7 +208,6 @@ $tests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         <!-- TAB CONTENT: MEMBERS -->
         <div id="content-members" class="hidden space-y-4">
-            <!-- (Giữ nguyên phần members như cũ) -->
              <?php if (empty($members)): ?>
                 <div class="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
                     <h3 class="text-sm font-medium text-gray-900">Chưa có thành viên nào</h3>
@@ -254,7 +253,7 @@ $tests = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <span id="toast-msg">Thông báo</span>
     </div>
 
-    <!-- MODAL HẸN GIỜ THÔNG MINH -->
+    <!-- MODAL HẸN GIỜ -->
     <div id="scheduleModal" class="fixed inset-0 bg-gray-900 bg-opacity-60 hidden overflow-y-auto h-full w-full z-50 flex items-center justify-center backdrop-blur-sm">
         <div class="relative mx-auto p-0 border-0 w-full max-w-md shadow-2xl rounded-xl bg-white animate-fade-in-down">
             <!-- Modal Header -->

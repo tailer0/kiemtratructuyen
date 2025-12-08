@@ -221,7 +221,7 @@ try {
                                         <i class="fa-solid fa-trash text-sm"></i>
                                     </a>
 
-                                    <div class="h-24 bg-gradient-to-r from-indigo-500 to-purple-600 p-5 relative">
+                                    <div class="h-24 bg-gradient-to-r from-violet-500 to-rose-600 p-5 relative">
                                         <h3 class="text-white font-bold text-lg truncate pr-8">
                                             <a href="view_class.php?id=<?php echo $class['id']; ?>" class="hover:underline">
                                                 <?php echo htmlspecialchars($class['class_name']); ?>

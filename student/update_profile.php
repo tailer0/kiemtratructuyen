@@ -59,14 +59,14 @@ $user = $stmt->fetch(PDO::FETCH_ASSOC);
     <style> body { font-family: 'Inter', sans-serif; } </style>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
-
+    
     <div class="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
-        <div class="bg-indigo-600 p-6 text-center">
+        <div class="bg-green-600 p-6 text-center">
             <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm text-white text-2xl">
                 <i class="fa-solid fa-user-pen"></i>
             </div>
             <h2 class="text-2xl font-bold text-white">Cập nhật hồ sơ</h2>
-            <p class="text-indigo-100 text-sm mt-1">Vui lòng hoàn thiện thông tin để tiếp tục.</p>
+            <p class="text-green-100 text-sm mt-1">Vui lòng hoàn thiện thông tin để tiếp tục.</p>
         </div>
 
         <div class="p-8">
@@ -101,7 +101,7 @@ $user = $stmt->fetch(PDO::FETCH_ASSOC);
                     <input type="date" name="dob" value="<?php echo htmlspecialchars($user['dob'] ?? ''); ?>" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
                 </div>
 
-                <button type="submit" class="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200">
+                <button type="submit" class="w-full bg-green-600 text-white py-2.5 rounded-lg font-bold hover:bg-green-700 transition-all shadow-lg shadow-green-200">
                     Lưu & Tiếp tục
                 </button>
             </form>

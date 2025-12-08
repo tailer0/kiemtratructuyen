@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // CONFIGURATION
     const CONFIG = {
         face: {
-            yawThreshold: 40, pitchDownThreshold: 30, pitchUpThreshold: 25,
+            yawThreshold: 30, pitchDownThreshold: 30, pitchUpThreshold: 25,
             minViolationDuration: 2500, detectionInterval: 500,
         },
         noFace: { duration: 4000, warningDuration: 3000 },
@@ -181,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dp = pose.pitch - state.calibration.neutralPitch;
         let msg = ''; let type = '';
 
-        if (Math.abs(dy) > 25) { msg = "Quay mặt quá mức"; type = "looking_away"; }
+        if (Math.abs(dy) > 20) { msg = "Quay mặt quá mức"; type = "looking_away"; }
         else if (dp > 20) { msg = "Cúi đầu xuống"; type = "head_down"; }
         else if (dp < -20) { msg = "Ngẩng đầu lên"; type = "head_up"; }
 

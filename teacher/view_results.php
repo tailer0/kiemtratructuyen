@@ -131,12 +131,12 @@ foreach ($all_logs as $log) {
     <aside class="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col z-10 shadow-lg">
         <div class="h-16 flex items-center px-6 border-b border-gray-100 bg-gradient-to-r from-indigo-600 to-purple-600">
             <i class="fa-solid fa-shield-halved text-white text-2xl mr-2"></i>
-            <span class="text-xl font-bold text-white">Smart Monitor</span>
+            <span class="text-xl font-bold text-white">Quản lý thi</span>
         </div>
 
         <nav class="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
             <a href="index.php" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                <i class="fa-solid fa-chart-line w-6 text-center mr-2 text-lg"></i> Dashboard
+                <i class="fa-solid fa-chart-line w-6 text-center mr-2 text-lg"></i> Trang chủ
             </a>
             <a href="view_class.php?id=<?php echo $test['class_id']; ?>" class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-600">
                 <i class="fa-solid fa-users w-6 text-center mr-2 text-lg"></i> Quay lại Lớp
@@ -152,9 +152,6 @@ foreach ($all_logs as $log) {
             </div>
             <button onclick="toggleBulkActions()" class="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:bg-amber-50 hover:text-amber-600 transition-all">
                 <i class="fa-solid fa-bolt w-6 text-center mr-2 text-lg"></i> Hành động hàng loạt
-            </button>
-            <button onclick="export_excel.php?test_id=<?php echo $test_id; ?>" class="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-slate-600 hover:bg-green-50 hover:text-green-600 transition-all">
-                <i class="fa-solid fa-file-export w-6 text-center mr-2 text-lg"></i> Xuất báo cáo
             </button>
         </nav>
         <div class="p-4 border-t border-gray-200 bg-slate-50">
@@ -195,6 +192,16 @@ foreach ($all_logs as $log) {
                 </span>
             </div>
             <div class="flex gap-2">
+                <label class="inline-flex items-center cursor-pointer select-none">
+                    <input type="checkbox" id="notif-toggle" class="sr-only peer" checked onchange="toggleNotifications()">
+                    <div class="relative w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+                    <span class="ms-2 text-sm font-medium text-slate-600 hidden sm:block">
+                        <i class="fa-solid fa-bell mr-1"></i> Thông báo
+                    </span>
+                </label>
+
+                <div class="h-6 w-px bg-slate-300 mx-1 hidden sm:block"></div>
+
                 <button onclick="toggleViewMode()" class="hidden sm:inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-all">
                     <i class="fa-solid fa-table-cells mr-2 text-indigo-600"></i> <span id="view-mode-text">Chế độ lưới</span>
                 </button>
@@ -621,7 +628,22 @@ foreach ($all_logs as $log) {
         const testId = <?php echo $test_id; ?>;
         const currentTeacherName = "<?php echo addslashes($_SESSION['user_name'] ?? 'GV'); ?>";
         let currentFilter = 'all';
+        let isNotifEnabled = localStorage.getItem('monitor_notif_sound') !== 'false';
 
+    // Cập nhật trạng thái nút toggle khi load trang
+    document.addEventListener('DOMContentLoaded', () => {
+        const toggleBtn = document.getElementById('notif-toggle');
+        if(toggleBtn) toggleBtn.checked = isNotifEnabled;
+    });
+
+    function toggleNotifications() {
+        const toggleBtn = document.getElementById('notif-toggle');
+        isNotifEnabled = toggleBtn.checked;
+        localStorage.setItem('monitor_notif_sound', isNotifEnabled); // Lưu cấu hình để không bị mất khi F5
+        
+        // Hiệu ứng visual nhỏ (optional)
+        if(isNotifEnabled) alert("Đã BẬT thông báo cảnh báo.");
+    }                                
         // Polling for updates (Cập nhật realtime)
         function pollUpdates() {
             fetch(`api_monitor.php?action=fetch_updates&test_id=${testId}&last_log_id=${lastLogId}`)
@@ -631,7 +653,9 @@ foreach ($all_logs as $log) {
                         const data = JSON.parse(text); // Try to parse
                         if (data.status === 'success' && data.new_logs.length > 0) {
                             data.new_logs.forEach(log => { 
+                                if (isNotifEnabled) {
                                 showNotification(log); 
+                            } 
                                 // Hiệu ứng đỏ khi có lỗi mới
                                 const row = document.getElementById(`row-${log.attempt_id}`);
                                 if (row) row.classList.add('animate-pulse-red');
